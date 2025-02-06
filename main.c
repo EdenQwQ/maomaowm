@@ -225,6 +225,7 @@ typedef struct {
   bool resizing;
   bool is_open_animation;
   bool is_restoring_from_ov;
+  bool iskilled;
 
   struct dwl_animation animation;
 
@@ -557,6 +558,7 @@ static unsigned int get_tags_first_tag(unsigned int tags);
 void client_commit(Client *c);
 void apply_border(Client *c, struct wlr_box clip_box);
 void client_set_opacity(Client *c, double opacity);
+void finish_kill_client(Client *c);
 
 /* variables */
 static const char broken[] = "broken";
@@ -757,7 +759,8 @@ bool client_animation_next_tick(Client *c) {
 
     c->animation.running = false;
     if (c->iskilling) {
-      client_send_close(c);
+      c->iskilled = true;
+      finish_kill_client(c);
       return false;
     }
     if (c->animation.tagouting) {
@@ -800,6 +803,10 @@ void apply_border(Client *c, struct wlr_box clip_box) {
 }
 
 void client_apply_clip(Client *c) {
+
+  if(c->iskilling)
+    return;
+
   uint32_t width, height;
   client_actual_size(c, &width, &height);
 
@@ -822,10 +829,12 @@ void client_apply_clip(Client *c) {
 }
 
 bool client_draw_frame(Client *c) {
-  if (!c || !client_surface(c)->mapped)
-    return false;
+  // if (!c || !client_surface(c)->mapped)
+  //   return false;
   // if (!VISIBLEON(c, c->mon))
   // 	return false;
+  if(c->iskilled)  
+    return false;
   bool need_more_frames = false;
   if (c->animation.running) {
     if (client_animation_next_tick(c)) {
@@ -2893,34 +2902,35 @@ void pending_kill_client(Client *c) {
   c->pending = c->geom;
   c->pending.y = c->geom.y + c->mon->m.height - (c->geom.y - c->mon->m.y);
 
-  if (c == grabc) {
-    cursor_mode = CurNormal;
-    grabc = NULL;
-  }
+  client_send_close(c);
+  // if (c == grabc) {
+  //   cursor_mode = CurNormal;
+  //   grabc = NULL;
+  // }
 
-  if (c == selmon->sel) {
-    selmon->sel = NULL;
-    Client *nextfocus = focustop(selmon);
+  // if (c == selmon->sel) {
+  //   selmon->sel = NULL;
+  //   Client *nextfocus = focustop(selmon);
 
-    if (nextfocus) {
-      focusclient(nextfocus, 0);
-    }
+  //   if (nextfocus) {
+  //     focusclient(nextfocus, 0);
+  //   }
 
-    if (!nextfocus && selmon->isoverview) {
-      Arg arg = {0};
-      toggleoverview(&arg);
-    }
-  }
+  //   if (!nextfocus && selmon->isoverview) {
+  //     Arg arg = {0};
+  //     toggleoverview(&arg);
+  //   }
+  // }
 
-  if (c->foreign_toplevel) {
-    wlr_foreign_toplevel_handle_v1_destroy(c->foreign_toplevel);
-    c->foreign_toplevel = NULL;
-  }
+  // if (c->foreign_toplevel) {
+  //   wlr_foreign_toplevel_handle_v1_destroy(c->foreign_toplevel);
+  //   c->foreign_toplevel = NULL;
+  // }
 
-  resize(c, c->geom, 0);
-  printstatus();
-  motionnotify(0, NULL, 0, 0, 0, 0);
-  arrange(selmon, false);
+  // resize(c, c->geom, 0);
+  // printstatus();
+  // motionnotify(0, NULL, 0, 0, 0, 0);
+  // arrange(selmon, false);
 }
 
 void killclient(const Arg *arg) {
@@ -3517,6 +3527,8 @@ rendermon(struct wl_listener *listener, void *data) {
   // }
 
   wl_list_for_each(c, &clients, link) {
+    if(c->iskilled)
+      continue;
     // if (client_is_rendered_on_mon(c, m) && !client_is_stopped(c))
     need_more_frames = client_draw_frame(c);
     // the opacity is usabel, but don't enable temporarily
@@ -4865,6 +4877,26 @@ unmaplayersurfacenotify(struct wl_listener *listener, void *data) {
   motionnotify(0, NULL, 0, 0, 0, 0);
 }
 
+void finish_kill_client(Client *c) {
+  if (client_is_unmanaged(c)) {
+    if (c == exclusive_focus)
+      exclusive_focus = NULL;
+    if (client_surface(c) == seat->keyboard_state.focused_surface)
+      focusclient(focustop(selmon), 1);
+  } else {
+    wl_list_remove(&c->link);
+    setmon(c, NULL, 0);
+    wl_list_remove(&c->flink);
+  }
+
+  if (c->foreign_toplevel) {
+    wlr_foreign_toplevel_handle_v1_destroy(c->foreign_toplevel);
+    c->foreign_toplevel = NULL;
+  }
+
+  // wlr_scene_node_destroy(&c->scene->node);
+}
+
 void unmapnotify(struct wl_listener *listener, void *data) {
   /* Called when the surface is unmapped, and should no longer be shown. */
   Client *c = wl_container_of(listener, c, unmap);
@@ -4888,25 +4920,11 @@ void unmapnotify(struct wl_listener *listener, void *data) {
     }
   }
 
-  if (client_is_unmanaged(c)) {
-    if (c == exclusive_focus)
-      exclusive_focus = NULL;
-    if (client_surface(c) == seat->keyboard_state.focused_surface)
-      focusclient(focustop(selmon), 1);
-  } else {
-    wl_list_remove(&c->link);
-    setmon(c, NULL, 0);
-    wl_list_remove(&c->flink);
-  }
+  resize(c,c->geom,0);
 
-  if (c->foreign_toplevel) {
-    wlr_foreign_toplevel_handle_v1_destroy(c->foreign_toplevel);
-    c->foreign_toplevel = NULL;
-  }
-
-  wlr_scene_node_destroy(&c->scene->node);
   printstatus();
   motionnotify(0, NULL, 0, 0, 0, 0);
+  arrange(c->mon,false);
 }
 
 void // 0.5
