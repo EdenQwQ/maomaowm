@@ -171,6 +171,7 @@ typedef struct {
   struct wlr_scene_tree *scene_surface;
   struct wl_list link;
   struct wl_list flink;
+  struct wl_list fadeout_link;
   union {
     struct wlr_xdg_surface *xdg;
     struct wlr_xwayland_surface *xwayland;
@@ -580,6 +581,7 @@ static struct wlr_xdg_activation_v1 *activation;
 static struct wlr_xdg_decoration_manager_v1 *xdg_decoration_mgr;
 static struct wl_list clients; /* tiling order */
 static struct wl_list fstack;  /* focus order */
+static struct wl_list fadeouts;
 // static struct wlr_idle *idle;
 static struct wlr_idle_notifier_v1 *idle_notifier;
 static struct wlr_idle_inhibit_manager_v1 *idle_inhibit_mgr;
@@ -715,6 +717,46 @@ double find_animation_curve_at(double t) {
   return baked_points[up].y;
 }
 
+
+bool fadeout_animation_next_tick(Client *c) {
+  double animation_passed =
+      (double)c->animation.passed_frames / c->animation.total_frames;
+  double factor = find_animation_curve_at(animation_passed);
+
+  uint32_t width = c->animation.initial.width +
+                   (c->current.width - c->animation.initial.width) * factor;
+  uint32_t height = c->animation.initial.height +
+                    (c->current.height - c->animation.initial.height) * factor;
+
+  uint32_t x =
+      c->animation.initial.x + (c->current.x - c->animation.initial.x) * factor;
+  uint32_t y =
+      c->animation.initial.y + (c->current.y - c->animation.initial.y) * factor;
+
+  wlr_scene_node_set_position(&c->scene->node, x, y);
+  c->animation.current = (struct wlr_box){
+      .x = x,
+      .y = y,
+      .width = width,
+      .height = height,
+  };
+
+
+  client_set_opacity(c, MAX(fadeout_begin_opacity - animation_passed, 0.1));
+
+
+  if (animation_passed == 1.0) {
+    c->animation.running = false;
+    wl_list_remove(&c->fadeout_link);
+    free(c);
+    return false;
+  } else {
+    c->animation.passed_frames++;
+    return true;
+  }
+}
+
+
 bool client_animation_next_tick(Client *c) {
   double animation_passed =
       (double)c->animation.passed_frames / c->animation.total_frames;
@@ -820,6 +862,20 @@ void client_apply_clip(Client *c) {
   wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
   apply_border(c, clip_box);
 }
+
+
+bool fadeout_draw_frame(Client *c) {
+
+  bool need_more_frames = false;
+  if (c->animation.running) {
+    if (fadeout_animation_next_tick(c)) {
+      need_more_frames = true;
+    }
+  } 
+
+  return need_more_frames;
+}
+
 
 bool client_draw_frame(Client *c) {
   if (!c || !client_surface(c)->mapped)
@@ -3509,6 +3565,7 @@ rendermon(struct wl_listener *listener, void *data) {
   struct wlr_gamma_control_v1 *gamma_control;
   struct timespec now;
   bool need_more_frames = false;
+  bool fadeout_need_more_frames = false;
 
   /* Render if no XDG clients have an outstanding resize and are visible on
    * this monitor. */
@@ -3524,7 +3581,15 @@ rendermon(struct wl_listener *listener, void *data) {
     // client_handle_opacity(c);
   }
 
-  if (need_more_frames) {
+  wl_list_for_each(c, &fadeouts, link) {
+    // if (client_is_rendered_on_mon(c, m) && !client_is_stopped(c))
+    fadeout_need_more_frames = fadeout_draw_frame(c);
+    // the opacity is usabel, but don't enable temporarily
+    // client_handle_opacity(c);
+  }
+
+
+  if (need_more_frames || fadeout_need_more_frames) {
     wlr_output_schedule_frame(m->wlr_output);
   }
 
@@ -4300,6 +4365,7 @@ void setup(void) {
    */
   wl_list_init(&clients);
   wl_list_init(&fstack);
+  wl_list_init(&fadeouts);
 
   idle_notifier = wlr_idle_notifier_v1_create(dpy);
 
@@ -4866,10 +4932,124 @@ unmaplayersurfacenotify(struct wl_listener *listener, void *data) {
   motionnotify(0, NULL, 0, 0, 0, 0);
 }
 
+static bool scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly,
+								struct wlr_scene_tree *snapshot_tree) {
+	if (!node->enabled && node->type != WLR_SCENE_NODE_TREE) {
+		return true;
+	}
+
+	lx += node->x;
+	ly += node->y;
+
+	struct wlr_scene_node *snapshot_node = NULL;
+	switch (node->type) {
+	case WLR_SCENE_NODE_TREE:;
+		struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
+
+		struct wlr_scene_node *child;
+		wl_list_for_each(child, &scene_tree->children, link) {
+			scene_node_snapshot(child, lx, ly, snapshot_tree);
+		}
+		break;
+	case WLR_SCENE_NODE_RECT:;
+		struct wlr_scene_rect *scene_rect = wlr_scene_rect_from_node(node);
+
+		struct wlr_scene_rect *snapshot_rect =
+			wlr_scene_rect_create(snapshot_tree, scene_rect->width,
+								  scene_rect->height, scene_rect->color);
+		snapshot_rect->node.data = scene_rect->node.data;
+		if (snapshot_rect == NULL) {
+			return false;
+		}
+		snapshot_node = &snapshot_rect->node;
+		break;
+	case WLR_SCENE_NODE_BUFFER:;
+		struct wlr_scene_buffer *scene_buffer =
+			wlr_scene_buffer_from_node(node);
+
+		struct wlr_scene_buffer *snapshot_buffer =
+			wlr_scene_buffer_create(snapshot_tree, NULL);
+		if (snapshot_buffer == NULL) {
+			return false;
+		}
+		snapshot_node = &snapshot_buffer->node;
+		snapshot_buffer->node.data = scene_buffer->node.data;
+
+		wlr_scene_buffer_set_dest_size(snapshot_buffer, scene_buffer->dst_width,
+									   scene_buffer->dst_height);
+		wlr_scene_buffer_set_opaque_region(snapshot_buffer,
+										   &scene_buffer->opaque_region);
+		wlr_scene_buffer_set_source_box(snapshot_buffer,
+										&scene_buffer->src_box);
+		wlr_scene_buffer_set_transform(snapshot_buffer,
+									   scene_buffer->transform);
+		wlr_scene_buffer_set_filter_mode(snapshot_buffer,
+										 scene_buffer->filter_mode);
+
+		// Effects
+		wlr_scene_buffer_set_opacity(snapshot_buffer, scene_buffer->opacity);
+
+		wlr_scene_buffer_set_opacity(snapshot_buffer, scene_buffer->opacity);
+
+		snapshot_buffer->node.data = scene_buffer->node.data;
+
+		struct wlr_scene_surface *scene_surface =
+			wlr_scene_surface_try_from_buffer(scene_buffer);
+		if (scene_surface != NULL && scene_surface->surface->buffer != NULL) {
+			wlr_scene_buffer_set_buffer(snapshot_buffer,
+										&scene_surface->surface->buffer->base);
+		} else {
+			wlr_scene_buffer_set_buffer(snapshot_buffer, scene_buffer->buffer);
+		}
+		break;
+
+	}
+
+	if (snapshot_node != NULL) {
+		wlr_scene_node_set_position(snapshot_node, lx, ly);
+	}
+
+	return true;
+}
+
+struct wlr_scene_tree *wlr_scene_tree_snapshot(struct wlr_scene_node *node,
+											   struct wlr_scene_tree *parent) {
+	struct wlr_scene_tree *snapshot = wlr_scene_tree_create(parent);
+	if (snapshot == NULL) {
+		return NULL;
+	}
+
+	// Disable and enable the snapshot tree like so to atomically update
+	// the scene-graph. This will prevent over-damaging or other weirdness.
+	wlr_scene_node_set_enabled(&snapshot->node, false);
+
+	if (!scene_node_snapshot(node, 0, 0, snapshot)) {
+		wlr_scene_node_destroy(&snapshot->node);
+		return NULL;
+	}
+
+	wlr_scene_node_set_enabled(&snapshot->node, true);
+
+	return snapshot;
+}
+
 void unmapnotify(struct wl_listener *listener, void *data) {
   /* Called when the surface is unmapped, and should no longer be shown. */
   Client *c = wl_container_of(listener, c, unmap);
 
+  Client *fadeout_client = malloc(sizeof(Client));
+  fadeout_client->geom = c->geom;
+  fadeout_client->pending = c->geom;
+  fadeout_client->pending.y = c->geom.y + c->mon->m.height - (c->geom.y - c->mon->m.y);
+  fadeout_client->scene = wlr_scene_tree_snapshot(&c->scene->node,c->scene);
+  fadeout_client->scene_surface = wlr_scene_tree_snapshot(&c->scene_surface->node,c->scene_surface);
+
+  fadeout_client->current = fadeout_client->pending;
+  fadeout_client->animation = c->animation;
+  c->animation.initial = c->geom;
+  c->animation.running = true;
+  wl_list_insert(&fadeouts, &fadeout_client->fadeout_link);
+  
   c->iskilling = 1;
 
   if (c == grabc) {
