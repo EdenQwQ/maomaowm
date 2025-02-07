@@ -733,6 +733,7 @@ bool fadeout_animation_next_tick(Client *c) {
   uint32_t y =
       c->animation.initial.y + (c->current.y - c->animation.initial.y) * factor;
 
+
   wlr_scene_node_set_position(&c->scene->node, x, y);
   c->animation.current = (struct wlr_box){
       .x = x,
@@ -798,10 +799,7 @@ bool client_animation_next_tick(Client *c) {
     }
 
     c->animation.running = false;
-    // if (c->iskilling) {
-    //   client_send_close(c);
-    //   return false;
-    // }
+
     if (c->animation.tagouting) {
       c->animation.tagouting = false;
       wlr_scene_node_set_enabled(&c->scene->node, false);
@@ -4945,13 +4943,13 @@ static bool scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly,
 	switch (node->type) {
 	case WLR_SCENE_NODE_TREE:;
 		struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
-
 		struct wlr_scene_node *child;
 		wl_list_for_each(child, &scene_tree->children, link) {
 			scene_node_snapshot(child, lx, ly, snapshot_tree);
 		}
 		break;
 	case WLR_SCENE_NODE_RECT:;
+
 		struct wlr_scene_rect *scene_rect = wlr_scene_rect_from_node(node);
 
 		struct wlr_scene_rect *snapshot_rect =
@@ -4964,6 +4962,7 @@ static bool scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly,
 		snapshot_node = &snapshot_rect->node;
 		break;
 	case WLR_SCENE_NODE_BUFFER:;
+
 		struct wlr_scene_buffer *scene_buffer =
 			wlr_scene_buffer_from_node(node);
 
@@ -5041,14 +5040,19 @@ void unmapnotify(struct wl_listener *listener, void *data) {
   fadeout_client->geom = c->geom;
   fadeout_client->pending = c->geom;
   fadeout_client->pending.y = c->geom.y + c->mon->m.height - (c->geom.y - c->mon->m.y);
-  fadeout_client->scene = wlr_scene_tree_snapshot(&c->scene->node,c->scene);
-  fadeout_client->scene_surface = wlr_scene_tree_snapshot(&c->scene_surface->node,c->scene_surface);
+
+
+
+  fadeout_client->scene = wlr_scene_tree_snapshot(&c->scene->node,layers[LyrTile]);
+  fadeout_client->scene_surface = wlr_scene_tree_snapshot(&c->scene_surface->node,layers[LyrTile]);
+
+	wlr_scene_node_set_enabled(&fadeout_client->scene->node, false);
+	wlr_scene_node_set_enabled(&fadeout_client->scene_surface->node, false);
 
   fadeout_client->current = fadeout_client->pending;
   fadeout_client->animation = c->animation;
   c->animation.initial = c->geom;
-  c->animation.running = true;
-  wl_list_insert(&fadeouts, &fadeout_client->fadeout_link);
+
   
   c->iskilling = 1;
 
@@ -5090,6 +5094,14 @@ void unmapnotify(struct wl_listener *listener, void *data) {
   wlr_scene_node_destroy(&c->scene->node);
   printstatus();
   motionnotify(0, NULL, 0, 0, 0, 0);
+	// wlr_scene_node_set_enabled(&c->scene->node, false);
+	// wlr_scene_node_set_enabled(&c->scene_surface->node, false);
+
+	wlr_scene_node_set_enabled(&fadeout_client->scene->node, true);
+	wlr_scene_node_set_enabled(&fadeout_client->scene_surface->node, true);
+  c->animation.running = true;
+  wl_list_insert(&fadeouts, &fadeout_client->fadeout_link);
+
 }
 
 void // 0.5
