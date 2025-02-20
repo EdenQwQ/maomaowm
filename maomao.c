@@ -770,8 +770,8 @@ bool client_animation_next_tick(Client *c) {
     if (surface && pointer_c == selmon->sel) {
       wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
     }
-    c->need_set_position = false;
-    return false;
+    // c->need_set_position = false;
+    return true;
   } else {
     c->animation.passed_frames++;
     return true;
@@ -879,15 +879,15 @@ void client_apply_clip(Client *c) {
   scale_data.height = clip_box.height - 2* c->bw;
   wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
   apply_border(c, clip_box, offset);
-  if(c->animation.running) {
-    scale_data.width_scale = (float)clip_box.width/c->current.width;
-    scale_data.height_scale = (float)clip_box.height/c->current.height;
-    buffer_set_size(c, scale_data);
-  } else {
-    scale_data.width_scale = 1.0;
-    scale_data.height_scale = 1.0;
-    buffer_set_size(c, scale_data);
-  }
+  // if(c->animation.running) {
+  scale_data.width_scale = (float)clip_box.width/c->current.width;
+  scale_data.height_scale = (float)clip_box.height/c->current.height;
+  buffer_set_size(c, scale_data);
+  // } else {
+  //   scale_data.width_scale = 1.0;
+  //   scale_data.height_scale = 1.0;
+  //   buffer_set_size(c, scale_data);
+  // }
 }
 
 bool client_draw_frame(Client *c) {
@@ -3647,9 +3647,9 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy, vo
 }
 
 void buffer_set_size(Client *c, animationScale data) {
-  if (c->animainit_geom.width <= c->current.width && c->animainit_geom.height <= c->geom.height) {
-    return;
-  }
+  // if (c->animainit_geom.width <= c->current.width && c->animainit_geom.height <= c->geom.height) {
+  //   return;
+  // }
   if(c->iskilling|| c->animation.tagouting || c->animation.tagining || c->animation.tagouted) {
     return;
   }
