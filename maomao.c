@@ -235,6 +235,7 @@ typedef struct {
   float scroller_proportion;
   bool need_set_position;
   struct dwl_animation animation;
+  struct wl_event_source *timer_tick;
 
 } Client;
 
@@ -550,6 +551,7 @@ void incovgaps(const Arg *arg);
 void incigaps(const Arg *arg);
 void defaultgaps(const Arg *arg);
 void buffer_set_size(Client *c, animationScale scale_data);
+int timer_tick_action(void *data);
 
 #include "dispatch.h"
 
@@ -600,7 +602,6 @@ static struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
 static struct wlr_pointer_constraint_v1 *active_constraint;
 
 static struct wlr_seat *seat;
-struct wl_event_source *timer_tick;
 static struct wl_list keyboards;
 static unsigned int cursor_mode;
 static Client *grabc;
@@ -771,8 +772,8 @@ bool client_animation_next_tick(Client *c) {
     if (surface && pointer_c == selmon->sel) {
       wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
     }
-    // c->need_set_position = false;
-    return true;
+    c->need_set_position = false;
+    return false;
   } else {
     c->animation.passed_frames++;
     return true;
@@ -1901,8 +1902,8 @@ void commitnotify(struct wl_listener *listener, void *data) {
   // if don't do this, some client may resize uncompleted
   resize(c, c->geom, (c->isfloating && !c->isfullscreen));
 
-	if (c->configure_serial && c->configure_serial <= c->surface.xdg->current.configure_serial)
-		c->configure_serial = 0;
+	// if (c->configure_serial && c->configure_serial <= c->surface.xdg->current.configure_serial)
+	// 	c->configure_serial = 0;
 
 }
 
@@ -3126,6 +3127,8 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->scene->node.data = c->scene_surface->node.data = c;
 
   client_get_geometry(c, &c->geom);
+  c->timer_tick = wl_event_loop_add_timer(wl_display_get_event_loop(dpy), timer_tick_action, c);
+  wl_event_source_timer_update(c->timer_tick, 0);
 
   /* Handle unmanaged clients first so we can return prior create borders */
   if (client_is_unmanaged(c)) {
@@ -3687,6 +3690,8 @@ void rendermon(struct wl_listener *listener, void *data) {
   struct timespec now;
 
   // Draw frames for all clients
+  // 对于初始隐射的窗口，在它第一次渲染提交之前，先给他设置好位置
+  // 避免闪烁
   wl_list_for_each(c, &clients, link) {
     if(!c->resize) {
       client_draw_frame(c);
@@ -3902,6 +3907,7 @@ void resize(Client *c, struct wlr_box geo, int interact) {
   if (!c->mon)
     return;
 
+  wl_event_source_timer_update(c->timer_tick, 10);
   c->need_set_position = true;
   // oldgeom = c->geom;
   bbox = interact ? &sgeom : &c->mon->w;
@@ -4389,18 +4395,17 @@ void signalhandler(int signalnumber) {
 }
 
 int timer_tick_action(void *data) {
-  Client *c;
+  Client *c = (Client *)data;
   bool need_more_frames = false;
 
-  // Draw frames for all clients
-  wl_list_for_each(c, &clients, link) {
-    need_more_frames = client_draw_frame(c);
-  }
+  need_more_frames = client_draw_frame(c);
 
   if (need_more_frames) {
     wlr_output_schedule_frame(selmon->wlr_output);
+    wl_event_source_timer_update(c->timer_tick, 10);
+  } else {
+    wl_event_source_timer_update(c->timer_tick, 0);
   }
-  wl_event_source_timer_update(timer_tick, 10);
 
   return 0;
 }
@@ -4637,8 +4642,6 @@ void setup(void) {
             "failed to setup XWayland X server, continuing without it\n");
   }
 #endif
-  timer_tick = wl_event_loop_add_timer(wl_display_get_event_loop(dpy), timer_tick_action, NULL);
-  wl_event_source_timer_update(timer_tick, 10);
 }
 
 void sigchld(int unused) {
@@ -5428,7 +5431,7 @@ void unmapnotify(struct wl_listener *listener, void *data) {
     wlr_foreign_toplevel_handle_v1_destroy(c->foreign_toplevel);
     c->foreign_toplevel = NULL;
   }
-
+  wl_event_source_remove(c->timer_tick);
   wlr_scene_node_destroy(&c->scene->node);
   printstatus();
   motionnotify(0, NULL, 0, 0, 0, 0);
