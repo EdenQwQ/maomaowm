@@ -600,6 +600,7 @@ static struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
 static struct wlr_pointer_constraint_v1 *active_constraint;
 
 static struct wlr_seat *seat;
+struct wl_event_source *timer_tick;
 static struct wl_list keyboards;
 static unsigned int cursor_mode;
 static Client *grabc;
@@ -3684,15 +3685,12 @@ void rendermon(struct wl_listener *listener, void *data) {
   struct wlr_output_state pending = {0};
 
   struct timespec now;
-  bool need_more_frames = false;
 
   // Draw frames for all clients
   wl_list_for_each(c, &clients, link) {
-    need_more_frames = client_draw_frame(c);
-  }
-
-  if (need_more_frames) {
-    wlr_output_schedule_frame(m->wlr_output);
+    if(!c->resize) {
+      client_draw_frame(c);
+    }
   }
 
   wlr_scene_output_commit(m->scene_output, NULL);
@@ -4390,6 +4388,23 @@ void signalhandler(int signalnumber) {
   // 不调用 exit 以允许生成核心转储文件
 }
 
+int timer_tick_action(void *data) {
+  Client *c;
+  bool need_more_frames = false;
+
+  // Draw frames for all clients
+  wl_list_for_each(c, &clients, link) {
+    need_more_frames = client_draw_frame(c);
+  }
+
+  if (need_more_frames) {
+    wlr_output_schedule_frame(selmon->wlr_output);
+  }
+  wl_event_source_timer_update(timer_tick, 10);
+
+  return 0;
+}
+
 void setup(void) {
 
   signal(SIGSEGV, signalhandler);
@@ -4622,6 +4637,8 @@ void setup(void) {
             "failed to setup XWayland X server, continuing without it\n");
   }
 #endif
+  timer_tick = wl_event_loop_add_timer(wl_display_get_event_loop(dpy), timer_tick_action, NULL);
+  wl_event_source_timer_update(timer_tick, 10);
 }
 
 void sigchld(int unused) {
