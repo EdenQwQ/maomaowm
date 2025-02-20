@@ -911,7 +911,7 @@ bool client_draw_frame(Client *c) {
     client_apply_clip(c);
     c->need_set_position = false;
   }
-
+  // c->resize = 1;
   return need_more_frames;
 }
 
@@ -3690,12 +3690,8 @@ void rendermon(struct wl_listener *listener, void *data) {
   struct timespec now;
 
   // Draw frames for all clients
-  // 对于初始隐射的窗口，在它第一次渲染提交之前，先给他设置好位置
-  // 避免闪烁
   wl_list_for_each(c, &clients, link) {
-    if(!c->resize) {
-      client_draw_frame(c);
-    }
+    client_draw_frame(c);
   }
 
   wlr_scene_output_commit(m->scene_output, NULL);
@@ -4398,10 +4394,8 @@ int timer_tick_action(void *data) {
   Client *c = (Client *)data;
   bool need_more_frames = false;
 
-  need_more_frames = client_draw_frame(c);
-
-  if (need_more_frames) {
-    wlr_output_schedule_frame(selmon->wlr_output);
+  if (c->animation.running) {
+    wlr_output_schedule_frame(c->mon->wlr_output);
     wl_event_source_timer_update(c->timer_tick, 10);
   } else {
     wl_event_source_timer_update(c->timer_tick, 0);
