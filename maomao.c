@@ -673,35 +673,66 @@ struct vec2 {
   double x, y;
 };
 
-#define BAKED_POINTS_COUNT 256
-struct vec2 *baked_points;
+enum {MOVE,OPEN,TAG};
 
-struct vec2 calculate_animation_curve_at(double t) {
+#define BAKED_POINTS_COUNT 256
+
+struct vec2 *baked_points_move;
+struct vec2 *baked_points_open;
+struct vec2 *baked_points_tag;
+
+struct vec2 calculate_animation_curve_at(double t, int type) {
   struct vec2 point;
+  double *animation_curve;
+  if (type == MOVE) {
+    animation_curve = animation_curve_move;
+  } else if (type == OPEN) {
+    animation_curve = animation_curve_open;
+  } else if (type == TAG) {
+    animation_curve = animation_curve_tag;
+  }
 
   point.x = 3 * t * (1 - t) * (1 - t) * animation_curve[0] +
-            3 * t * t * (1 - t) * animation_curve[2] + t * t * t;
+  3 * t * t * (1 - t) * animation_curve[2] + t * t * t;
 
   point.y = 3 * t * (1 - t) * (1 - t) * animation_curve[1] +
-            3 * t * t * (1 - t) * animation_curve[3] + t * t * t;
+  3 * t * t * (1 - t) * animation_curve[3] + t * t * t;
 
   return point;
 }
 
 void init_baked_points(void) {
-  baked_points = calloc(BAKED_POINTS_COUNT, sizeof(*baked_points));
+  baked_points_move = calloc(BAKED_POINTS_COUNT, sizeof(*baked_points_move));
+  baked_points_open = calloc(BAKED_POINTS_COUNT, sizeof(*baked_points_open));
+  baked_points_tag = calloc(BAKED_POINTS_COUNT, sizeof(*baked_points_tag));
 
   for (size_t i = 0; i < BAKED_POINTS_COUNT; i++) {
-    baked_points[i] =
-        calculate_animation_curve_at((double)i / (BAKED_POINTS_COUNT - 1));
+    baked_points_move[i] =
+        calculate_animation_curve_at((double)i / (BAKED_POINTS_COUNT - 1), MOVE);
+  }
+  for (size_t i = 0; i < BAKED_POINTS_COUNT; i++) {
+    baked_points_open[i] =
+        calculate_animation_curve_at((double)i / (BAKED_POINTS_COUNT - 1), OPEN);
+  }
+  for (size_t i = 0; i < BAKED_POINTS_COUNT; i++) {
+    baked_points_tag[i] =
+        calculate_animation_curve_at((double)i / (BAKED_POINTS_COUNT - 1), TAG);
   }
 }
 
-double find_animation_curve_at(double t) {
+double find_animation_curve_at(double t,int type) {
   size_t down = 0;
   size_t up = BAKED_POINTS_COUNT - 1;
 
   size_t middle = (up + down) / 2;
+  struct vec2 *baked_points;
+  if(type == MOVE) {
+    baked_points = baked_points_move;
+  } else if(type == OPEN) {
+    baked_points = baked_points_open;
+  } else if(type == TAG) {
+    baked_points = baked_points_tag;
+  }
   while (up - down != 1) {
     if (baked_points[middle].x <= t) {
       down = middle;
@@ -710,14 +741,15 @@ double find_animation_curve_at(double t) {
     }
     middle = (up + down) / 2;
   }
-
   return baked_points[up].y;
+
 }
 
 bool client_animation_next_tick(Client *c) {
   double animation_passed =
       (double)c->animation.passed_frames / c->animation.total_frames;
-  double factor = find_animation_curve_at(animation_passed);
+  int type = c->animation.tagining || c->animation.tagouting ? TAG : c->is_open_animation ? OPEN : MOVE;
+  double factor = find_animation_curve_at(animation_passed,type);
   Client *pointer_c = NULL;
   double sx = 0, sy = 0;
   struct wlr_surface *surface = NULL;
@@ -745,8 +777,6 @@ bool client_animation_next_tick(Client *c) {
     c->animation.begin_fade_in = true;
     client_set_opacity(c, MIN(animation_passed + fadein_begin_opacity, 1.0));
   }
-
-  c->is_open_animation = false;
 
   if (animation_passed == 1.0) {
     if (c->animation.begin_fade_in) {
@@ -3165,6 +3195,12 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
   c->is_open_animation = true;
+  c->current = (struct wlr_box){
+    .x = 0,
+    .y = 0,
+    .width = 0,
+    .height = 0,
+  };
   // nop
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -3655,7 +3691,7 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy, vo
 }
 
 void buffer_set_size(Client *c, animationScale data) {
-  if (c->animation.current.width <= c->current.width && c->animation.current.height <= c->geom.height) {
+  if (c->animation.current.width <= c->geom.width && c->animation.current.height <= c->geom.height) {
     return;
   }
   if(c->iskilling|| c->animation.tagouting || c->animation.tagining || c->animation.tagouted) {
@@ -3918,6 +3954,7 @@ void resize(Client *c, struct wlr_box geo, int interact) {
   // oldgeom = c->geom;
   bbox = interact ? &sgeom : &c->mon->w;
 
+
   if (strcmp(c->mon->pertag->ltidxs[c->mon->pertag->curtag]->name,
              "scroller") == 0) {
     c->geom = geo;
@@ -3984,6 +4021,10 @@ void resize(Client *c, struct wlr_box geo, int interact) {
   if (!c->animation.tagouting && !c->iskilling) {
     c->pending = c->geom;
   }
+
+  if((c->current.x+c->current.y+c->current.width+c->current.height > 0) && !wlr_box_equal(&c->current, &c->pending) && c->is_open_animation)
+    c->is_open_animation = false;
+
   // 开始应用动画设置
   client_set_pending_state(c);
 
