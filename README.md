@@ -200,6 +200,9 @@ or you can just choice a curve in:
 [maomao-config](https://github.com/DreamMaoMao/dotfile/tree/main/maomao)
 
 # thanks for some refer repo 
+
+- https://gitlab.freedesktop.org/wlroots/wlroots - Implementation of wayland protocol
+
 - https://github.com/dqrk0jeste/owl - for basal window animaition
 
 - https://github.com/djpohly/dwl - for basal dwl feature
