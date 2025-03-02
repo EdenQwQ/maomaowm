@@ -929,79 +929,37 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx, int offsety) 
     return;
 
   wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
-
+  wlr_scene_rect_set_size(c->border[0], clip_box.width, c->bw);
+  wlr_scene_rect_set_size(c->border[1], clip_box.width, c->bw);
+  wlr_scene_rect_set_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
+  wlr_scene_rect_set_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
+  wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
+  wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
+  wlr_scene_node_set_position(&c->border[1]->node, 0,
+                              clip_box.height - c->bw);
+  wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
+                              c->bw);
 
   if (c->animation.running && c->animation.action != MOVE) {
-    if (c->animation.current.x < c->mon->m.x) {
-      wlr_scene_rect_set_size(c->border[0], clip_box.width, c->bw);
-      wlr_scene_rect_set_size(c->border[1], clip_box.width, c->bw);
+    if (c->animation.current.x < c->mon->m.x) { 
       wlr_scene_rect_set_size(c->border[2], 0, 0);
-      wlr_scene_rect_set_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
-      wlr_scene_node_set_position(&c->border[0]->node, offsetx, 0);
-      wlr_scene_node_set_position(&c->border[2]->node, 0 + offsetx, c->bw);
-      wlr_scene_node_set_position(&c->border[1]->node, offsetx,
-                                  clip_box.height - c->bw);
-      wlr_scene_node_set_position(&c->border[3]->node,
-                                  clip_box.width - c->bw + offsetx, c->bw);
     } else if (c->animation.current.x + c->geom.width >
-               c->mon->m.x + c->mon->m.width) {
-      wlr_scene_rect_set_size(c->border[0], clip_box.width, c->bw);
-      wlr_scene_rect_set_size(c->border[1], clip_box.width, c->bw);
-      wlr_scene_rect_set_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
+               c->mon->m.x + c->mon->m.width) { 
       wlr_scene_rect_set_size(c->border[3], 0, 0);
-      wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
-      wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-      wlr_scene_node_set_position(&c->border[1]->node, 0,
-                                  clip_box.height - c->bw);
-      wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
-                                  c->bw);
-    } else if (c->animation.current.y < c->mon->m.y) {
+    } else if (c->animation.current.y < c->mon->m.y) { 
       wlr_scene_rect_set_size(c->border[0], 0, 0);
-      wlr_scene_rect_set_size(c->border[1], clip_box.width, c->bw);
-      wlr_scene_rect_set_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
-      wlr_scene_rect_set_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
-      wlr_scene_node_set_position(&c->border[0]->node, 0, offsety);
-      wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw + offsety);
-      wlr_scene_node_set_position(&c->border[1]->node, 0,
-                                  clip_box.height - c->bw + offsety);
-      wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
-                                  c->bw + offsety);
     } else if (c->animation.current.y + c->geom.height >
-               c->mon->m.y + c->mon->m.height) {
-      wlr_scene_rect_set_size(c->border[0], clip_box.width, c->bw);
+               c->mon->m.y + c->mon->m.height) { 
       wlr_scene_rect_set_size(c->border[1], 0, 0);
-      wlr_scene_rect_set_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
-      wlr_scene_rect_set_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
-      wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
-      wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-      wlr_scene_node_set_position(&c->border[1]->node, 0,
-                                  clip_box.height - c->bw);
-      wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
-                                  c->bw);
-    } else {
-      wlr_scene_rect_set_size(c->border[0], clip_box.width, c->bw);
-      wlr_scene_rect_set_size(c->border[1], clip_box.width, c->bw);
-      wlr_scene_rect_set_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
-      wlr_scene_rect_set_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
-      wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
-      wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-      wlr_scene_node_set_position(&c->border[1]->node, 0,
-                                  clip_box.height - c->bw);
-      wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
-                                  c->bw);
     }
-  } else {
-    wlr_scene_rect_set_size(c->border[0], clip_box.width, c->bw);
-    wlr_scene_rect_set_size(c->border[1], clip_box.width, c->bw);
-    wlr_scene_rect_set_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
-    wlr_scene_rect_set_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
-    wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
-    wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-    wlr_scene_node_set_position(&c->border[1]->node, 0,
-                                clip_box.height - c->bw);
-    wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
-                                c->bw);
   }
+
+  wlr_scene_node_set_position(&c->border[0]->node, offsetx, offsety);
+  wlr_scene_node_set_position(&c->border[2]->node, offsetx, c->bw + offsety);
+  wlr_scene_node_set_position(&c->border[1]->node, offsetx,
+                              clip_box.height - c->bw + offsety);
+  wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw + offsetx,
+                              c->bw + offsety);
 }
 
 void client_apply_clip(Client *c) {
