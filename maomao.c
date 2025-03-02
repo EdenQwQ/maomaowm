@@ -5068,7 +5068,8 @@ void overview(Monitor *m, unsigned int gappo, unsigned int gappi) {
   grid(m, overviewgappo, overviewgappi);
 }
 
-void fibonacci(Monitor *mon, int s) {
+void fibonacci(Monitor *mon, int s)
+{
   unsigned int i = 0, n = 0, nx, ny, nw, nh;
   Client *c;
 
@@ -5087,45 +5088,59 @@ void fibonacci(Monitor *mon, int s) {
   wl_list_for_each(c, &clients, link) if (VISIBLEON(c, mon) && !c->isfloating &&
                                           !c->iskilling && !c->isfullscreen &&
                                           !c->ismaxmizescreen &&
-                                          !c->animation.tagouting) {
-    if ((i % 2 && nh / 2 > 2 * c->bw) || (!(i % 2) && nw / 2 > 2 * c->bw)) {
-      if (i < n - 1) {
-        if (i % 2) {
-            if(i==1)
-              nh = nh * c->mon->pertag->smfacts[selmon->pertag->curtag];
-            else
-              nh /= 2;
-      } else
+                                          !c->animation.tagouting)
+  {
+    if ((i % 2 && nh / 2 > 2 * c->bw) || (!(i % 2) && nw / 2 > 2 * c->bw))
+    {
+      if (i < n - 1)
+      {
+        if (i % 2)
+        {
+          if (i == 1)
+            nh = nh * c->mon->pertag->smfacts[selmon->pertag->curtag];
+          else
+            nh /= 2;
+        }
+        else
           nw /= 2;
-      if ((i % 4) == 2 && !s)
-        nx += nw;
-      else if ((i % 4) == 3 && !s)
-        ny += nh;
+        if ((i % 4) == 2 && !s)
+          nx += nw;
+        else if ((i % 4) == 3 && !s)
+          ny += nh;
       }
 
-      if ((i % 4) == 0) {
+      if ((i % 4) == 0)
+      {
         if (s)
           ny += nh;
         else
           ny -= nh;
-      } else if ((i % 4) == 1)
+      }
+      else if ((i % 4) == 1)
         nx += nw;
       else if ((i % 4) == 2)
         ny += nh;
-      else if ((i % 4) == 3) {
+      else if ((i % 4) == 3)
+      {
         if (s)
           nx += nw;
         else
           nx -= nw;
       }
 
-      if (i == 0) {
+      if (i == 0)
+      {
         if (n != 1)
           nw = (mon->w.width - gappoh) *
                mon->pertag->mfacts[mon->pertag->curtag];
         ny = mon->w.y + gappov;
-      } else if (i == 1)
+      }
+      else if (i == 1)
+      {
         nw = mon->w.width - gappoh - nw;
+      }
+      else if (i == 2)
+        nh = mon->w.height - gappov - nh;
       i++;
     }
 
