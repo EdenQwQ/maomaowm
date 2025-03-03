@@ -18,14 +18,14 @@ https://github.com/user-attachments/assets/c9bf9415-fad1-4400-bcdc-3ad2d76de85a
 
 # Maomaowm
 
-This project is developed based on `dwl(0.5)` , 
-adding many operation that supported in hyprland and a hyprland-like keybinds,
-niri-like scroll layout and sway-like scratchpad.
+This project is developed based on `dwl` , it is basically compatible with all `dwm` features.
+In addition, it is added many operation that supported in `hyprland`, such as `smooth and customizable animation`、`External configuration that can be hot overloaded`,`pin mode`,`maximize window` etc...
+
 See below for more features.
 
 # separate window layout for each workspace(tags), with separate workspace parameters
 ## support layout
-- tile(master)
+- tile
 - scroller
 - monocle
 - grid
@@ -48,17 +48,16 @@ See below for more features.
 
 # some special feature
 - hycov like overview
-- foreign-toplevel support(dunst,waybar wlr taskbar)
+- foreign-toplevel protocol(dunst,waybar wlr taskbar)
 - minimize window to waybar(like hych)
-- sway scratchpad support (minimize window to scratchpad)
-- window pin mode support
-- text-input-v2/v3 for fcitx5
-- window move/open animaition
-- workspace switch animaition
-- fade in animation
+- sway scratchpad (minimize window to scratchpad)
+- window pin mode/ maximize mode
+- text-input-v2/v3 protocol for fcitx5
+- window move/open/close animaition
+- workspaces(tags) switch animaition
+- fade/fadeout animation
 - alt-tab switch window like gnome
 - niri like scroller layout
-- fadeout animation
 
 ## suggest tools
 ```
@@ -200,12 +199,12 @@ or you can just choice a curve in:
 
 # thanks for some refer repo 
 
-- https://gitlab.freedesktop.org/wlroots/wlroots - Implementation of wayland protocol
+- https://gitlab.freedesktop.org/wlroots/wlroots - implementation of wayland protocol
 
-- https://github.com/dqrk0jeste/owl - for basal window animaition
+- https://github.com/dqrk0jeste/owl - basal window animaition
 
-- https://github.com/djpohly/dwl - for basal dwl feature
+- https://github.com/djpohly/dwl - basal dwl feature
 
-- https://github.com/guyuming76/dwl - for text-input
+- https://github.com/guyuming76/dwl - sample of text-input protocol
 
-- https://github.com/swaywm/sway - for foreign-toplevel
+- https://github.com/swaywm/sway - sample of wayland protocol
