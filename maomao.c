@@ -44,7 +44,11 @@
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/render/fx_renderer/fx_renderer.h>
+#include <scenefx/types/fx/clipped_region.h>
+#include <scenefx/types/fx/corner_location.h>
+#include <scenefx/types/wlr_scene.h>
+#include <wayland-util.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_server_decoration.h>
@@ -241,7 +245,8 @@ typedef struct {
   struct dwl_animation animation;
   bool is_fadeout_client;
   // struct wl_event_source *timer_tick;
-
+  int corner_radius;
+  struct wlr_scene_rect *round_border;
 } Client;
 
 typedef struct {
@@ -517,6 +522,10 @@ static Monitor *xytomon(double x, double y);
 static void xytonode(double x, double y, struct wlr_surface **psurface,
                      Client **pc, LayerSurface **pl, double *nx, double *ny);
 static void clear_fullscreen_flag(Client *c);
+
+static void iter_xdg_scene_buffers(struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data);
+static void iter_xdg_scene_buffers_corner_radius(struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data);
+static void output_configure_scene(struct wlr_scene_node *node, Client *c);
 
 static void warp_cursor_to_selmon(const Monitor *m);
 unsigned int want_restore_fullscreen(Client *target_client);
@@ -946,7 +955,7 @@ void client_actual_size(Client *c, uint32_t *width, uint32_t *height) {
 
 void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
                   int offsety) {
-
+  int i;
   if (c->iskilling || !client_surface(c)->mapped)
     return;
 
@@ -981,6 +990,20 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
                               clip_box.height - c->bw + offsety);
   wlr_scene_node_set_position(
       &c->border[3]->node, clip_box.width - c->bw + offsetx, c->bw + offsety);
+
+  	if (corner_radius > 0) {
+  		wlr_scene_node_set_position(&c->round_border->node, 0, 0);
+  		wlr_scene_rect_set_size(c->round_border, c->geom.width, c->geom.height);
+  		wlr_scene_rect_set_clipped_region(c->round_border, (struct clipped_region) {
+  			.corner_radius = c->corner_radius,
+  			.corners = CORNER_LOCATION_ALL,
+  			.area = { c->bw, c->bw, c->geom.width - c->bw * 2, c->geom.height - c->bw * 2 }
+  		});
+  		/* hide original border */
+  		for (i = 0; i < 4; i++)
+  			wlr_scene_rect_set_color(c->border[i], transparent);
+  	}
+  
 }
 
 void client_apply_clip(Client *c) {
@@ -2682,7 +2705,7 @@ destroysessionmgr(struct wl_listener *listener, void *data) {
 void // 17
 associatex11(struct wl_listener *listener, void *data) {
   Client *c = wl_container_of(listener, c, associate);
-
+  c->corner_radius = corner_radius;
   LISTEN(&client_surface(c)->events.map, &c->map, mapnotify);
   LISTEN(&client_surface(c)->events.unmap, &c->unmap, unmapnotify);
 }
@@ -3481,6 +3504,15 @@ mapnotify(struct wl_listener *listener, void *data) {
     c->border[i]->node.data = c;
   }
 
+  wlr_scene_node_for_each_buffer(&c->scene_surface->node, iter_xdg_scene_buffers, c);
+
+  if (corner_radius > 0) {
+  	c->round_border = wlr_scene_rect_create(c->scene, 0, 0, c->isurgent ? urgentcolor : bordercolor);
+  	c->round_border->node.data = c;
+  	/* Lower the border below the XDG scene tree */
+  	wlr_scene_node_lower_to_bottom(&c->round_border->node);
+  }
+
   /* Initialize client geometry with room for border */
   client_set_tiled(c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT |
                           WLR_EDGE_RIGHT);
@@ -3558,6 +3590,15 @@ mapnotify(struct wl_listener *listener, void *data) {
     wlr_foreign_toplevel_handle_v1_set_activated(c->foreign_toplevel, true);
 
   printstatus();
+
+  	if (corner_radius > 0) {
+  		int radius = c->corner_radius + c->bw;
+  		if ((corner_radius_only_floating && !c->isfloating) || c->isfullscreen) {
+  			radius = 0;
+  		}
+  		wlr_scene_rect_set_corner_radius(c->round_border, radius, CORNER_LOCATION_ALL);
+  	}
+
 }
 
 void // 0.5
@@ -4010,6 +4051,7 @@ void rendermon(struct wl_listener *listener, void *data) {
   }
 
   wlr_scene_output_commit(m->scene_output, NULL);
+  output_configure_scene(&m->scene_output->scene->tree.node, NULL);
 
   // Send frame done notification
   clock_gettime(CLOCK_MONOTONIC, &now);
@@ -4827,7 +4869,7 @@ void setup(void) {
   wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
 
   /* Create a renderer with the default implementation */
-  if (!(drw = wlr_renderer_autocreate(backend)))
+  if (!(drw = fx_renderer_create(backend)))
     die("couldn't create renderer");
 
   /* Create shm, drm and linux_dmabuf interfaces by ourselves.
@@ -5704,6 +5746,106 @@ void togglefullscreen(const Arg *arg) {
 
   sel->is_scratchpad_show = 0;
   sel->is_in_scratchpad = 0;
+}
+
+void
+iter_xdg_scene_buffers(struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data)
+{
+	Client *c = user_data;
+	struct wlr_scene_surface * scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+	struct wlr_xdg_surface *xdg_surface;
+
+	if (!scene_surface) {
+		return;
+	}
+
+	xdg_surface = wlr_xdg_surface_try_from_wlr_surface(scene_surface->surface);
+
+	if (c && xdg_surface && xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		/* TODO: Be able to set whole decoration_data instead of calling */
+		/* each individually? */
+		if (!wlr_subsurface_try_from_wlr_surface(xdg_surface->surface)) {
+			if (corner_radius_inner > 0) {
+				int radius = corner_radius_inner;
+				if ((corner_radius_only_floating && !c->isfloating) || c->isfullscreen) {
+					radius = 0;
+				}
+				wlr_scene_buffer_set_corner_radius(buffer, radius, CORNER_LOCATION_ALL);
+			}
+		}
+	}
+}
+
+void
+iter_xdg_scene_buffers_corner_radius(struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data)
+{
+	Client *c = user_data;
+	struct wlr_scene_surface * scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+	struct wlr_xdg_surface *xdg_surface;
+
+	if (!scene_surface) {
+		return;
+	}
+
+	xdg_surface = wlr_xdg_surface_try_from_wlr_surface(scene_surface->surface);
+
+	if (c && xdg_surface && xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		/* TODO: Be able to set whole decoration_data instead of calling */
+		/* each individually? */
+		if (corner_radius_inner > 0) {
+			int radius = corner_radius_inner;
+			if ((corner_radius_only_floating && !c->isfloating) || c->isfullscreen) {
+				radius = 0;
+			}
+			wlr_scene_buffer_set_corner_radius(buffer, radius, CORNER_LOCATION_ALL);
+		}
+	}
+}
+
+void
+output_configure_scene(struct wlr_scene_node *node, Client *c)
+{
+	Client *_c;
+	struct wlr_xdg_surface *xdg_surface;
+	struct wlr_scene_node *_node;
+
+	if (!node->enabled) {
+		return;
+	}
+
+	_c = node->data;
+	if (_c) {
+		c = _c;
+	}
+
+	if (node->type == WLR_SCENE_NODE_BUFFER) {
+		struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
+
+		struct wlr_scene_surface *scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+		if (!scene_surface) {
+			return;
+		}
+
+		xdg_surface = wlr_xdg_surface_try_from_wlr_surface(scene_surface->surface);
+
+		if (c && xdg_surface && xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+
+			if (!wlr_subsurface_try_from_wlr_surface(xdg_surface->surface)) {
+				if (corner_radius_inner > 0) {
+					int radius = corner_radius_inner;
+					if ((corner_radius_only_floating && !c->isfloating) || c->isfullscreen) {
+						radius = 0;
+					}
+					wlr_scene_buffer_set_corner_radius(buffer, radius, CORNER_LOCATION_ALL);
+				}
+			}
+		}
+	} else if (node->type == WLR_SCENE_NODE_TREE) {
+		struct wlr_scene_tree *tree = wl_container_of(node, tree, node);
+		wl_list_for_each(_node, &tree->children, link) {
+			output_configure_scene(_node, c);
+		}
+	}
 }
 
 void togglemaxmizescreen(const Arg *arg) {

@@ -141,3 +141,9 @@ enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 static const char *tags[] = {
     "1", "2", "3", "4", "5", "6", "7", "8", "9",
 };
+
+static const int corner_radius = 15; /* 0 disables corner_radius */
+static const int corner_radius_inner = 10; /* 0 disables corner_radius */
+static const int corner_radius_only_floating = 0; /* only apply corner_radius and corner_radius_inner to floating windows */
+
+static float transparent[4] = {0.1f, 0.1f, 0.1f, 0.0f};
