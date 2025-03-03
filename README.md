@@ -153,11 +153,55 @@ ov_tab_mode=0
 - you can also use the dwl moudle in waybar to show tags and window title
 refer to waybar wiki: [dwl-module](https://github.com/Alexays/Waybar/wiki/Module:-Dwl)
 
-```
+```json
 "modules-left": ["dwl/tags","dwl/window"],
 "dwl/tags": {
     "num-tags":9,
 },
+
+```
+
+```css
+#tags{
+    background-color: transparent;
+}
+
+#tags button{
+    background-color: #fff ;
+    color: 	#a585cd ;
+}
+
+
+#tags button.occupied{
+    background-color: #fff ;
+    color: 	#cdc885 ;
+}
+
+#tags button.focused{
+    background-color: rgb(186, 142, 213);
+    color: 	#fff ;
+}
+
+#tags button.urgent{
+    background: rgb(171, 101, 101);
+    color: #fff;
+}
+
+#window{
+    background-color: rgb(237, 196, 147);
+    color: 	rgb(63, 37, 5);
+}
+
+window#waybar.empty #window {
+    background-color: transparent;
+    color: transparent;
+    border-bottom:none;
+    box-shadow: none;
+    padding-right: 0px;
+    padding-left: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+}
 
 ```
 
