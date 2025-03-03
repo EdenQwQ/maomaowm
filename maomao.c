@@ -2334,6 +2334,8 @@ createmon(struct wl_listener *listener, void *data)
   m->mfact = default_mfact;
   m->nmaster = default_nmaster;
   enum wl_output_transform rr = WL_OUTPUT_TRANSFORM_NORMAL;
+  wlr_output_state_set_scale(&state, scale);
+  wlr_output_state_set_transform(&state, rr);
 
   m->lt = &layouts[0];
   for (ji = 0; ji < config.monitor_rules_count; ji++) {
@@ -2355,6 +2357,8 @@ createmon(struct wl_listener *listener, void *data)
       }
       scale = r->scale;
       rr = r->rr;
+      wlr_output_state_set_scale(&state, r->scale);
+			wlr_output_state_set_transform(&state, r->rr);
       break;
     }
   }
