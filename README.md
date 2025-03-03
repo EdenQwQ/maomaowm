@@ -66,7 +66,7 @@ yay -S rofi foot xdg-desktop-portal-wlr swaybg waybar wl-clip-persist cliphist w
 ```
 
 # install 
-# wlroots(0.17)
+## wlroots(0.17)
 ```
 git clone -b 0.17.4 https://gitlab.freedesktop.org/wlroots/wlroots.git
 cd wlroots
@@ -78,9 +78,18 @@ cd maomaowm
 meson build -Dprefix=/usr
 sudo ninja -C build install
 
-# set your autostart app ih this
-mkdir -p ~/.config/maomao/
+```
 
+## wlroots(0.18.2)
+- Although I haven't experienced crashes in this version, it hasn't had enough time to validate and test some of the issues that might be caused by the api changes(Like something that needs to be changed that I haven't noticed yet
+), 0.18.2 should be more stable in terms of functionality.
+
+```
+yay -S wlroots
+git clone -b wlroots-0.18 https://github.com/DreamMaoMao/maomaowm.git
+cd maomaowm
+meson build -Dprefix=/usr
+sudo ninja -C build install
 
 ```
 
