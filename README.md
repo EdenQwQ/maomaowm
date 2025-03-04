@@ -66,7 +66,10 @@ yay -S rofi foot xdg-desktop-portal-wlr swaybg waybar wl-clip-persist cliphist w
 ```
 
 # install 
-## wlroots(0.17)
+## stable - wlroots(0.17)
+Since 0.18 has some bugs that affect the experience, 
+I chose the more stable 0.17.4.
+
 ```
 git clone -b 0.17.4 https://gitlab.freedesktop.org/wlroots/wlroots.git
 cd wlroots
@@ -79,20 +82,17 @@ meson build -Dprefix=/usr
 sudo ninja -C build install
 
 ```
-
-## wlroots(0.18.2)
-- Although I haven't experienced crashes in this version, it hasn't had enough time to validate and test some of the issues that might be caused by the api changes(Like something that needs to be changed that I haven't noticed yet
-), 0.18.2 should be more stable in terms of functionality.
+## unstable wlroots(0.19)
+This is the latest version of wlroots, it doesn't own enough test.
+you can try it out if you want to help to test.
 
 ```
-yay -S wlroots
-git clone -b wlroots-0.18 https://github.com/DreamMaoMao/maomaowm.git
+yay -S wlroots-git
+git clone -b wlroots-0.19 https://github.com/DreamMaoMao/maomaowm.git
 cd maomaowm
 meson build -Dprefix=/usr
 sudo ninja -C build install
-
 ```
-
 
 # config
 you can use `MAOMAOCONFIG` env to set the config-folder-path and the autostart-folder-patch
