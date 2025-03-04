@@ -20,6 +20,9 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_data_control_v1.h>
+#include <wlr/types/wlr_alpha_modifier_v1.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
+#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_drm.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
@@ -4824,7 +4827,7 @@ void setup(void) {
 
   init_baked_points();
 
-  int i, sig[] = {SIGCHLD, SIGINT, SIGTERM, SIGPIPE};
+  int drm_fd, i, sig[] = {SIGCHLD, SIGINT, SIGTERM, SIGPIPE};
   struct sigaction sa = {.sa_flags = SA_RESTART, .sa_handler = handlesig};
   sigemptyset(&sa.sa_mask);
 
@@ -4875,6 +4878,10 @@ void setup(void) {
         scene, wlr_linux_dmabuf_v1_create_with_renderer(dpy, 5, drw));
   }
 
+	if ((drm_fd = wlr_renderer_get_drm_fd(drw)) >= 0 && drw->features.timeline
+			&& backend->features.timeline)
+		wlr_linux_drm_syncobj_manager_v1_create(dpy, 1, drm_fd);
+
   /* Create a default allocator */
   if (!(alloc = wlr_allocator_autocreate(backend, drw)))
     die("couldn't create allocator");
@@ -4894,8 +4901,9 @@ void setup(void) {
   wlr_viewporter_create(dpy);
   wlr_single_pixel_buffer_manager_v1_create(dpy);
   wlr_fractional_scale_manager_v1_create(dpy, 1);
-  wlr_presentation_create(dpy, backend);
+  wlr_presentation_create(dpy, backend, 2);
   wlr_subcompositor_create(dpy);
+  wlr_alpha_modifier_v1_create(dpy);
 
   /* Initializes the interface used to implement urgency hints */
   activation = wlr_xdg_activation_v1_create(dpy);
