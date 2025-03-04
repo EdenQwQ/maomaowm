@@ -90,11 +90,7 @@
 #define ISFULLSCREEN(A)                                                        \
   ((A)->isfullscreen || (A)->ismaxmizescreen ||                                \
    (A)->overview_ismaxmizescreenbak || (A)->overview_isfullscreenbak)
-#define LISTEN_STATIC(E, H)                                                    \
-  do {                                                                         \
-    static struct wl_listener _l = {.notify = (H)};                            \
-    wl_signal_add((E), &_l);                                                   \
-  } while (0)
+#define LISTEN_STATIC(E, H)     do { struct wl_listener *_l = ecalloc(1, sizeof(*_l)); _l->notify = (H); wl_signal_add((E), _l); } while (0)
 
 /* enums */
 /* enums */
@@ -390,7 +386,8 @@ static void cleanup(void); // 退出清理
 static void cleanupkeyboard(struct wl_listener *listener,
                             void *data);                          // 退出清理
 static void cleanupmon(struct wl_listener *listener, void *data); // 退出清理
-static void closemon(Monitor *m);                                 // 退出清理
+static void closemon(Monitor *m);   
+static void cleanuplisteners(void);
 static void toggle_hotarea(int x_root, int y_root);               // 触发热区
 static void commitlayersurfacenotify(struct wl_listener *listener, void *data);
 static void commitnotify(struct wl_listener *listener, void *data);
@@ -418,7 +415,6 @@ static void destroylocksurface(struct wl_listener *listener, void *data);
 static void destroynotify(struct wl_listener *listener, void *data);
 static void destroypointerconstraint(struct wl_listener *listener, void *data);
 static void destroysessionlock(struct wl_listener *listener, void *data);
-static void destroysessionmgr(struct wl_listener *listener, void *data);
 static Monitor *dirtomon(enum wlr_direction dir);
 static void setcursorshape(struct wl_listener *listener, void *data);
 static void dwl_ipc_manager_bind(struct wl_client *client, void *data,
@@ -642,8 +638,34 @@ static struct zdwl_ipc_output_v2_interface dwl_output_implementation = {
     .set_tags = dwl_ipc_output_set_tags,
     .set_layout = dwl_ipc_output_set_layout,
     .set_client_tags = dwl_ipc_output_set_client_tags};
-static struct wl_listener lock_listener = {.notify = locksession};
+
+static struct wl_listener cursor_axis = {.notify = axisnotify};
+static struct wl_listener cursor_button = {.notify = buttonpress};
+static struct wl_listener cursor_frame = {.notify = cursorframe};
+static struct wl_listener cursor_motion = {.notify = motionrelative};
+static struct wl_listener cursor_motion_absolute = {.notify = motionabsolute};
 static struct wl_listener gpu_reset = {.notify = gpureset};
+static struct wl_listener layout_change = {.notify = updatemons};
+static struct wl_listener new_idle_inhibitor = {.notify = createidleinhibitor};
+static struct wl_listener new_input_device = {.notify = inputdevice};
+static struct wl_listener new_virtual_keyboard = {.notify = virtualkeyboard};
+static struct wl_listener new_virtual_pointer = {.notify = virtualpointer};
+static struct wl_listener new_pointer_constraint = {.notify = createpointerconstraint};
+static struct wl_listener new_output = {.notify = createmon};
+static struct wl_listener new_xdg_toplevel = {.notify = createnotify};
+static struct wl_listener new_xdg_popup = {.notify = createpopup};
+static struct wl_listener new_xdg_decoration = {.notify = createdecoration};
+static struct wl_listener new_layer_surface = {.notify = createlayersurface};
+static struct wl_listener output_mgr_apply = {.notify = outputmgrapply};
+static struct wl_listener output_mgr_test = {.notify = outputmgrtest};
+static struct wl_listener request_activate = {.notify = urgent};
+static struct wl_listener request_cursor = {.notify = setcursor};
+static struct wl_listener request_set_psel = {.notify = setpsel};
+static struct wl_listener request_set_sel = {.notify = setsel};
+static struct wl_listener request_set_cursor_shape = {.notify = setcursorshape};
+static struct wl_listener request_start_drag = {.notify = requeststartdrag};
+static struct wl_listener start_drag = {.notify = startdrag};
+static struct wl_listener new_session_lock = {.notify = locksession};
 
 #ifdef XWAYLAND
 static void activatex11(struct wl_listener *listener, void *data);
@@ -654,6 +676,8 @@ static void associatex11(struct wl_listener *listener, void *data);
 static Atom getatom(xcb_connection_t *xc, const char *name);
 static void sethints(struct wl_listener *listener, void *data);
 static void xwaylandready(struct wl_listener *listener, void *data);
+static struct wl_listener new_xwayland_surface = {.notify = createnotifyx11};
+static struct wl_listener xwayland_ready = {.notify = xwaylandready};
 void free_config(void);
 // static struct wl_listener new_xwayland_surface = {.notify = createnotifyx11};
 // static struct wl_listener xwayland_ready = {.notify = xwaylandready};
@@ -1961,8 +1985,45 @@ setcursorshape(struct wl_listener *listener, void *data) {
                            wlr_cursor_shape_v1_name(event->shape));
 }
 
+void
+cleanuplisteners(void)
+{
+	wl_list_remove(&cursor_axis.link);
+	wl_list_remove(&cursor_button.link);
+	wl_list_remove(&cursor_frame.link);
+	wl_list_remove(&cursor_motion.link);
+	wl_list_remove(&cursor_motion_absolute.link);
+	wl_list_remove(&gpu_reset.link);
+	wl_list_remove(&new_idle_inhibitor.link);
+	wl_list_remove(&layout_change.link);
+	wl_list_remove(&new_input_device.link);
+	wl_list_remove(&new_virtual_keyboard.link);
+	wl_list_remove(&new_virtual_pointer.link);
+	wl_list_remove(&new_pointer_constraint.link);
+	wl_list_remove(&new_output.link);
+	wl_list_remove(&new_xdg_toplevel.link);
+	wl_list_remove(&new_xdg_decoration.link);
+	wl_list_remove(&new_xdg_popup.link);
+	wl_list_remove(&new_layer_surface.link);
+	wl_list_remove(&output_mgr_apply.link);
+	wl_list_remove(&output_mgr_test.link);
+	wl_list_remove(&request_activate.link);
+	wl_list_remove(&request_cursor.link);
+	wl_list_remove(&request_set_psel.link);
+	wl_list_remove(&request_set_sel.link);
+	wl_list_remove(&request_set_cursor_shape.link);
+	wl_list_remove(&request_start_drag.link);
+	wl_list_remove(&start_drag.link);
+	wl_list_remove(&new_session_lock.link);
+#ifdef XWAYLAND
+	wl_list_remove(&new_xwayland_surface.link);
+	wl_list_remove(&xwayland_ready.link);
+#endif
+}
+
 void // 17
 cleanup(void) {
+  cleanuplisteners();
 #ifdef XWAYLAND
   wlr_xwayland_destroy(xwayland);
 #endif
@@ -1971,7 +2032,7 @@ cleanup(void) {
     kill(child_pid, SIGTERM);
     waitpid(child_pid, NULL, 0);
   }
-  wl_list_remove(&gpu_reset.link);
+
   wlr_backend_destroy(backend);
   wlr_scene_node_destroy(&scene->tree.node);
   wlr_renderer_destroy(drw);
@@ -2200,6 +2261,7 @@ commitpopup(struct wl_listener *listener, void *data)
 	box.y -= (type == LayerShell ? l->geom.y : c->geom.y);
 	wlr_xdg_popup_unconstrain_from_box(popup, &box);
 	wl_list_remove(&listener->link);
+  free(listener);
 }
 
 void
@@ -2590,13 +2652,18 @@ destroydragicon(struct wl_listener *listener, void *data) {
   /* Focus enter isn't sent during drag, so refocus the focused node. */
   focusclient(focustop(selmon), 1);
   motionnotify(0, NULL, 0, 0, 0, 0);
+	wl_list_remove(&listener->link);
+	free(listener);
 }
 
-void // 17
-destroyidleinhibitor(struct wl_listener *listener, void *data) {
-  /* `data` is the wlr_surface of the idle inhibitor being destroyed,
-   * at this point the idle inhibitor is still in the list of the manager */
-  checkidleinhibitor(wlr_surface_get_root_surface(data));
+void
+destroyidleinhibitor(struct wl_listener *listener, void *data)
+{
+	/* `data` is the wlr_surface of the idle inhibitor being destroyed,
+	 * at this point the idle inhibitor is still in the list of the manager */
+	checkidleinhibitor(wlr_surface_get_root_surface(data));
+	wl_list_remove(&listener->link);
+	free(listener);
 }
 
 void // 0.5
@@ -2700,12 +2767,6 @@ destroysessionlock(struct wl_listener *listener, void *data) {
   SessionLock *lock = wl_container_of(listener, lock, destroy);
   destroylock(lock, 0);
   motionnotify(0, NULL, 0, 0, 0, 0);
-}
-
-void // 0.5
-destroysessionmgr(struct wl_listener *listener, void *data) {
-  wl_list_remove(&lock_listener.link);
-  wl_list_remove(&listener->link);
 }
 
 void // 17
@@ -3443,28 +3504,28 @@ void killclient(const Arg *arg) {
   }
 }
 
-void // 0.5
-locksession(struct wl_listener *listener, void *data) {
-  struct wlr_session_lock_v1 *session_lock = data;
-  SessionLock *lock;
-  wlr_scene_node_set_enabled(&locked_bg->node, 1);
-  if (cur_lock) {
-    wlr_session_lock_v1_destroy(session_lock);
-    return;
-  }
-  lock = session_lock->data = ecalloc(1, sizeof(*lock));
-  focusclient(NULL, 0);
+void
+locksession(struct wl_listener *listener, void *data)
+{
+	struct wlr_session_lock_v1 *session_lock = data;
+	SessionLock *lock;
+	wlr_scene_node_set_enabled(&locked_bg->node, 1);
+	if (cur_lock) {
+		wlr_session_lock_v1_destroy(session_lock);
+		return;
+	}
+	lock = session_lock->data = ecalloc(1, sizeof(*lock));
+	focusclient(NULL, 0);
 
-  lock->scene = wlr_scene_tree_create(layers[LyrBlock]);
-  cur_lock = lock->lock = session_lock;
-  locked = 1;
+	lock->scene = wlr_scene_tree_create(layers[LyrBlock]);
+	cur_lock = lock->lock = session_lock;
+	locked = 1;
 
-  LISTEN(&session_lock->events.new_surface, &lock->new_surface,
-         createlocksurface);
-  LISTEN(&session_lock->events.destroy, &lock->destroy, destroysessionlock);
-  LISTEN(&session_lock->events.unlock, &lock->unlock, unlocksession);
+	LISTEN(&session_lock->events.new_surface, &lock->new_surface, createlocksurface);
+	LISTEN(&session_lock->events.destroy, &lock->destroy, destroysessionlock);
+	LISTEN(&session_lock->events.unlock, &lock->unlock, unlocksession);
 
-  wlr_session_lock_v1_send_locked(session_lock);
+	wlr_session_lock_v1_send_locked(session_lock);
 }
 
 void // 0.5
@@ -4907,7 +4968,7 @@ void setup(void) {
 
   /* Initializes the interface used to implement urgency hints */
   activation = wlr_xdg_activation_v1_create(dpy);
-  LISTEN_STATIC(&activation->events.request_activate, urgent);
+  wl_signal_add(&activation->events.request_activate, &request_activate);
 
   gamma_control_mgr = wlr_gamma_control_manager_v1_create(dpy);
   LISTEN_STATIC(&gamma_control_mgr->events.set_gamma, setgamma);
@@ -4915,13 +4976,13 @@ void setup(void) {
   /* Creates an output layout, which a wlroots utility for working with an
    * arrangement of screens in a physical layout. */
   output_layout = wlr_output_layout_create(dpy);
-  LISTEN_STATIC(&output_layout->events.change, updatemons);
+  wl_signal_add(&output_layout->events.change, &layout_change);
   wlr_xdg_output_manager_v1_create(dpy, output_layout);
 
   /* Configure a listener to be notified when new outputs are available on the
    * backend. */
   wl_list_init(&mons);
-  LISTEN_STATIC(&backend->events.new_output, createmon);
+  wl_signal_add(&backend->events.new_output, &new_output);
 
   /* Set up our client lists and the xdg-shell. The xdg-shell is a
    * Wayland protocol which is used for application windows. For more
@@ -4933,21 +4994,22 @@ void setup(void) {
   wl_list_init(&fstack);
   wl_list_init(&fadeout_clients);
 
-  idle_notifier = wlr_idle_notifier_v1_create(dpy);
+	idle_notifier = wlr_idle_notifier_v1_create(dpy);
 
-  idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
-  LISTEN_STATIC(&idle_inhibit_mgr->events.new_inhibitor, createidleinhibitor);
+	idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
+	wl_signal_add(&idle_inhibit_mgr->events.new_inhibitor, &new_idle_inhibitor);
+
 
   layer_shell = wlr_layer_shell_v1_create(dpy, 3);
-  LISTEN_STATIC(&layer_shell->events.new_surface, createlayersurface);
+  wl_signal_add(&layer_shell->events.new_surface, &new_layer_surface);
 
   xdg_shell = wlr_xdg_shell_create(dpy, 6);
-  LISTEN_STATIC(&xdg_shell->events.new_toplevel, createnotify);
-	LISTEN_STATIC(&xdg_shell->events.new_popup, createpopup);
+	wl_signal_add(&xdg_shell->events.new_toplevel, &new_xdg_toplevel);
+	wl_signal_add(&xdg_shell->events.new_popup, &new_xdg_popup);
 
   session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
-  wl_signal_add(&session_lock_mgr->events.new_lock, &lock_listener);
-  LISTEN_STATIC(&session_lock_mgr->events.destroy, destroysessionmgr);
+  wl_signal_add(&session_lock_mgr->events.new_lock, &new_session_lock);
+
   locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
                                     (float[4]){0.1, 0.1, 0.1, 1.0});
   wlr_scene_node_set_enabled(&locked_bg->node, 0);
@@ -4957,11 +5019,10 @@ void setup(void) {
       wlr_server_decoration_manager_create(dpy),
       WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
   xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
-  LISTEN_STATIC(&xdg_decoration_mgr->events.new_toplevel_decoration,
-                createdecoration);
+  wl_signal_add(&xdg_decoration_mgr->events.new_toplevel_decoration, &new_xdg_decoration);
+
   pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
-  LISTEN_STATIC(&pointer_constraints->events.new_constraint,
-                createpointerconstraint);
+  wl_signal_add(&pointer_constraints->events.new_constraint, &new_pointer_constraint);
 
   relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
 
@@ -4992,15 +5053,15 @@ void setup(void) {
    *
    * And more comments are sprinkled throughout the notify functions above.
    */
-  LISTEN_STATIC(&cursor->events.motion, motionrelative);
-  LISTEN_STATIC(&cursor->events.motion_absolute, motionabsolute);
-  LISTEN_STATIC(&cursor->events.button, buttonpress);
-  LISTEN_STATIC(&cursor->events.axis, axisnotify);
-  LISTEN_STATIC(&cursor->events.frame, cursorframe);
+	wl_signal_add(&cursor->events.motion, &cursor_motion);
+	wl_signal_add(&cursor->events.motion_absolute, &cursor_motion_absolute);
+	wl_signal_add(&cursor->events.button, &cursor_button);
+	wl_signal_add(&cursor->events.axis, &cursor_axis);
+	wl_signal_add(&cursor->events.frame, &cursor_frame);
 
   // 这两句代码会造成obs窗口里的鼠标光标消失,不知道注释有什么影响
   cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
-  LISTEN_STATIC(&cursor_shape_mgr->events.request_set_shape, setcursorshape);
+  wl_signal_add(&cursor_shape_mgr->events.request_set_shape, &request_set_cursor_shape);
 
   /*
    * Configures a seat, which is a single "seat" at which a user sits and
@@ -5009,24 +5070,24 @@ void setup(void) {
    * let us know when new input devices are available on the backend.
    */
   wl_list_init(&keyboards);
-  LISTEN_STATIC(&backend->events.new_input, inputdevice);
+  wl_signal_add(&backend->events.new_input, &new_input_device);
   virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
-  LISTEN_STATIC(&virtual_keyboard_mgr->events.new_virtual_keyboard,
-                virtualkeyboard);
+	wl_signal_add(&virtual_keyboard_mgr->events.new_virtual_keyboard,
+    &new_virtual_keyboard);
   virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
-  LISTEN_STATIC(&virtual_pointer_mgr->events.new_virtual_pointer,
-                virtualpointer);
+  wl_signal_add(&virtual_pointer_mgr->events.new_virtual_pointer,
+    &new_virtual_pointer);
 
   seat = wlr_seat_create(dpy, "seat0");
-  LISTEN_STATIC(&seat->events.request_set_cursor, setcursor);
-  LISTEN_STATIC(&seat->events.request_set_selection, setsel);
-  LISTEN_STATIC(&seat->events.request_set_primary_selection, setpsel);
-  LISTEN_STATIC(&seat->events.request_start_drag, requeststartdrag);
-  LISTEN_STATIC(&seat->events.start_drag, startdrag);
+	wl_signal_add(&seat->events.request_set_cursor, &request_cursor);
+	wl_signal_add(&seat->events.request_set_selection, &request_set_sel);
+	wl_signal_add(&seat->events.request_set_primary_selection, &request_set_psel);
+	wl_signal_add(&seat->events.request_start_drag, &request_start_drag);
+	wl_signal_add(&seat->events.start_drag, &start_drag);
 
   output_mgr = wlr_output_manager_v1_create(dpy);
-  LISTEN_STATIC(&output_mgr->events.apply, outputmgrapply);
-  LISTEN_STATIC(&output_mgr->events.test, outputmgrtest);
+	wl_signal_add(&output_mgr->events.apply, &output_mgr_apply);
+	wl_signal_add(&output_mgr->events.test, &output_mgr_test);
 
 #ifdef IM
   /* create text_input-, and input_method-protocol relevant globals */
@@ -5052,8 +5113,8 @@ void setup(void) {
    */
   xwayland = wlr_xwayland_create(dpy, compositor, 1);
   if (xwayland) {
-    LISTEN_STATIC(&xwayland->events.ready, xwaylandready);
-    LISTEN_STATIC(&xwayland->events.new_surface, createnotifyx11);
+		wl_signal_add(&xwayland->events.ready, &xwayland_ready);
+		wl_signal_add(&xwayland->events.new_surface, &new_xwayland_surface);
 
     setenv("DISPLAY", xwayland->display_name, 1);
   } else {
