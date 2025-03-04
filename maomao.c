@@ -1839,10 +1839,10 @@ axisnotify(struct wl_listener *listener, void *data) {
   // 获取当前按键的mask,比如alt+super或者alt+ctrl
   mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
 
-  // if (event->orientation == WLR_AXIS_ORIENTATION_VERTICAL)
+  if (event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL)
     adir = event->delta > 0 ? AxisDown : AxisUp;
-  // else
-    // adir = event->delta > 0 ? AxisRight : AxisLeft;
+  else
+    adir = event->delta > 0 ? AxisRight : AxisLeft;
 
   for (ji = 0; ji < config.axis_bindings_count; ji++) {
     if (config.axis_bindings_count < 1)
