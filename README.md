@@ -18,7 +18,8 @@ https://github.com/user-attachments/assets/c9bf9415-fad1-4400-bcdc-3ad2d76de85a
 
 # Maomaowm
 
-This project is developed based on `dwl` , it is basically compatible with all `dwm` features.
+This project is developed based on [dwl](https://codeberg.org/dwl/dwl/),
+it is basically compatible with all `dwm` features.
 In addition, it is added many operation that supported in `hyprland`, such as `smooth and customizable animation`、`External configuration that can be hot overloaded`,`pin mode`,`maximize window` etc...
 
 See below for more features.
@@ -45,6 +46,8 @@ See below for more features.
 - monitor  : type-num(0-99999)
 - width : type-num(0-9999)
 - height : type-num(0-9999)
+- isterm : type-num(0 or 1) it will be swallowed by the sub window 
+- noswallow: type-num(0 or 1) don't swallow the isterm window
 
 # some special feature
 - hycov like overview
@@ -66,7 +69,10 @@ yay -S rofi foot xdg-desktop-portal-wlr swaybg waybar wl-clip-persist cliphist w
 ```
 
 # install 
-# wlroots(0.17)
+## stable - wlroots(0.17)
+Since 0.18 has some bugs that affect the experience, 
+I chose the more stable 0.17.4.
+
 ```
 git clone -b 0.17.4 https://gitlab.freedesktop.org/wlroots/wlroots.git
 cd wlroots
@@ -78,12 +84,18 @@ cd maomaowm
 meson build -Dprefix=/usr
 sudo ninja -C build install
 
-# set your autostart app ih this
-mkdir -p ~/.config/maomao/
-
+```
+## unstable wlroots(0.19)
+This is the latest version of wlroots, it doesn't own enough test.
+you can try it out if you want to help to test.
 
 ```
-
+yay -S wlroots-git
+git clone -b wlroots-0.19 https://github.com/DreamMaoMao/maomaowm.git
+cd maomaowm
+meson build -Dprefix=/usr
+sudo ninja -C build install
+```
 
 # config
 you can use `MAOMAOCONFIG` env to set the config-folder-path and the autostart-folder-patch
@@ -276,7 +288,7 @@ window#waybar.empty #window {
 
 - https://github.com/dqrk0jeste/owl - basal window animaition
 
-- https://github.com/djpohly/dwl - basal dwl feature
+- https://codeberg.org/dwl/dwl - basal dwl feature
 
 - https://github.com/guyuming76/dwl - sample of text-input protocol
 
