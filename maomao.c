@@ -552,6 +552,7 @@ void client_set_opacity(Client *c, double opacity);
 void init_baked_points(void);
 void scene_buffer_apply_opacity(struct wlr_scene_buffer *buffer, int sx, int sy,
                                 void *data);
+void view_in_mon(const Arg *arg, bool want_animation, Monitor *m);
 
 Client *direction_select(const Arg *arg);
 void bind_to_view(const Arg *arg);
@@ -2957,16 +2958,7 @@ dwl_ipc_output_set_tags(struct wl_client *client, struct wl_resource *resource, 
 		return;
 	monitor = ipc_output->mon;
 
-	if (!newtags || newtags == monitor->tagset[monitor->seltags])
-		return;
-	if (toggle_tagset)
-		monitor->seltags ^= 1;
-
-	monitor->tagset[monitor->seltags] = newtags;
-	if (selmon == monitor)
-		focusclient(focustop(monitor), 1);
-	arrange(monitor,false);
-	printstatus();
+  view_in_mon(&(Arg){.ui = newtags}, true,monitor);
 }
 
 void
@@ -6130,37 +6122,41 @@ urgent(struct wl_listener *listener, void *data) {
 
 void bind_to_view(const Arg *arg) { view(arg, true); }
 
-void view(const Arg *arg, bool want_animation) {
+void view_in_mon(const Arg *arg, bool want_animation, Monitor *m) {
   size_t i, tmptag;
 
-  if (!selmon || (arg->ui != ~0 && selmon->isoverview)) {
+  if (!m || (arg->ui != ~0 && m->isoverview)) {
     return;
   }
-  if ((selmon->tagset[selmon->seltags] & arg->ui & TAGMASK) != 0) {
+  if ((m->tagset[m->seltags] & arg->ui & TAGMASK) != 0) {
     want_animation = false;
   }
 
-  selmon->seltags ^= 1; /* toggle sel tagset */
+  m->seltags ^= 1; /* toggle sel tagset */
   if (arg->ui & TAGMASK) {
-    selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
+    m->tagset[m->seltags] = arg->ui & TAGMASK;
+    m->pertag->prevtag = m->pertag->curtag;
 
     if (arg->ui == ~0)
-      selmon->pertag->curtag = 0;
+    m->pertag->curtag = 0;
     else {
       for (i = 0; !(arg->ui & 1 << i); i++)
         ;
-      selmon->pertag->curtag = i + 1;
+        m->pertag->curtag = i + 1;
     }
   } else {
-    tmptag = selmon->pertag->prevtag;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = tmptag;
+    tmptag = m->pertag->prevtag;
+    m->pertag->prevtag = m->pertag->curtag;
+    m->pertag->curtag = tmptag;
   }
 
-  focusclient(focustop(selmon), 1);
-  arrange(selmon, want_animation);
+  focusclient(focustop(m), 1);
+  arrange(m, want_animation);
   printstatus();
+}
+
+void view(const Arg *arg, bool want_animation) {
+  view_in_mon(arg, want_animation, selmon);
 }
 
 void viewtoleft(const Arg *arg) {
