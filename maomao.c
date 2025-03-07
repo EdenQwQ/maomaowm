@@ -2418,7 +2418,7 @@ createmon(struct wl_listener *listener, void *data) {
   wl_list_insert(&mons, &m->link);
 
   m->pertag = calloc(1, sizeof(Pertag));
-  m->pertag->curtag = m->pertag->prevtag = 1;
+  m->pertag->curtag = m->pertag->prevtag = 0;
 
   for (i = 0; i <= LENGTH(tags); i++) {
     m->pertag->nmasters[i] = m->nmaster;
@@ -2826,6 +2826,7 @@ void dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output) {
   Monitor *monitor = ipc_output->mon;
   Client *c, *focused;
   int tagmask, state, numclients, focused_client, tag;
+  int curtag;
   const char *title, *appid, *symbol;
   focused = focustop(monitor);
   zdwl_ipc_output_v2_send_active(ipc_output->resource, monitor == selmon);
@@ -2882,7 +2883,8 @@ void dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output) {
 
   title = focused ? client_get_title(focused) : "";
   appid = focused ? client_get_appid(focused) : "";
-  symbol = monitor->pertag->ltidxs[monitor->pertag->curtag]->symbol;
+  curtag = monitor->pertag->curtag;
+  symbol = monitor->pertag->ltidxs[curtag]->symbol;
 
   zdwl_ipc_output_v2_send_layout(
     ipc_output->resource,
@@ -2951,6 +2953,7 @@ dwl_ipc_output_set_tags(struct wl_client *client, struct wl_resource *resource, 
 	DwlIpcOutput *ipc_output;
 	Monitor *monitor;
 	unsigned int newtags = tagmask & TAGMASK;
+  unsigned int curren_tag,i;
 
 	ipc_output = wl_resource_get_user_data(resource);
 	if (!ipc_output)
@@ -2959,13 +2962,16 @@ dwl_ipc_output_set_tags(struct wl_client *client, struct wl_resource *resource, 
 
 	if (!newtags || newtags == monitor->tagset[monitor->seltags])
 		return;
-	if (toggle_tagset)
-		monitor->seltags ^= 1;
 
 	monitor->tagset[monitor->seltags] = newtags;
+  monitor->pertag->prevtag = monitor->pertag->curtag;
+  curren_tag = get_tags_first_tag(newtags);
+  for (i = 0; curren_tag & TAGMASK; i++, curren_tag >>= 1)
+  ;
+  selmon->pertag->curtag = i - 1;
 	if (selmon == monitor)
 		focusclient(focustop(monitor), 1);
-	arrange(monitor,false);
+	arrange(monitor,true);
 	printstatus();
 }
 
@@ -6132,83 +6138,51 @@ void bind_to_view(const Arg *arg) { view(arg, true); }
 
 void view(const Arg *arg, bool want_animation) {
   size_t i, tmptag;
+  unsigned current_tag;
+
 
   if (!selmon || (arg->ui != ~0 && selmon->isoverview)) {
     return;
   }
-  if ((selmon->tagset[selmon->seltags] & arg->ui & TAGMASK) != 0) {
-    want_animation = false;
+
+  selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
+  selmon->pertag->prevtag = selmon->pertag->curtag;
+  if (arg->ui == ~0)
+    selmon->pertag->curtag = 0;
+  else {
+    current_tag = get_tags_first_tag(arg->ui & TAGMASK);
+    for (i = 0; current_tag & TAGMASK; i++, current_tag >>= 1)
+      ;
+    selmon->pertag->curtag = i - 1;
   }
 
-  selmon->seltags ^= 1; /* toggle sel tagset */
-  if (arg->ui & TAGMASK) {
-    selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-
-    if (arg->ui == ~0)
-      selmon->pertag->curtag = 0;
-    else {
-      for (i = 0; !(arg->ui & 1 << i); i++)
-        ;
-      selmon->pertag->curtag = i + 1;
-    }
-  } else {
-    tmptag = selmon->pertag->prevtag;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = tmptag;
-  }
-
+  lognumtofile(selmon->pertag->curtag);
   focusclient(focustop(selmon), 1);
   arrange(selmon, want_animation);
   printstatus();
 }
 
 void viewtoleft(const Arg *arg) {
-  size_t tmptag;
-  unsigned int target = selmon->tagset[selmon->seltags];
-
-  if (selmon->isoverview || selmon->pertag->curtag == 0) {
+  unsigned int target = selmon->pertag->curtag - 1;
+  if (target < 0)
     return;
-  }
+  unsigned int target_mask = (1 << target) & TAGMASK;
 
-  target >>= 1;
-
-  if (target == 0) {
-    return;
-  }
-
-  if (!selmon || (target) == selmon->tagset[selmon->seltags])
-    return;
-  selmon->seltags ^= 1; /* toggle sel tagset */
-  if (target) {
-    selmon->tagset[selmon->seltags] = target;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = selmon->pertag->curtag - 1;
-  } else {
-    tmptag = selmon->pertag->prevtag;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = tmptag;
-  }
-
-  focusclient(focustop(selmon), 1);
-  arrange(selmon, true);
-  printstatus();
+  view(&(Arg){.ui =target_mask}, true);
 }
 
 void viewtoright_have_client(const Arg *arg) {
   size_t tmptag;
   Client *c;
   unsigned int found = 0;
-  unsigned int n = 1;
-  unsigned int target = selmon->tagset[selmon->seltags];
+  unsigned int n = 0;
+  unsigned int target_mask = 1 << selmon->pertag->curtag;
+  unsigned target;
 
-  if (selmon->isoverview || selmon->pertag->curtag == 0) {
-    return;
-  }
-
-  for (target <<= 1; target & TAGMASK; target <<= 1, n++) {
+  for (target_mask <<= 1; target_mask & TAGMASK; target_mask <<= 1) {
+    n = n + 1;
     wl_list_for_each(c, &clients, link) {
-      if (target & c->tags) {
+      if (target_mask & c->tags) {
         found = 1;
         break;
       }
@@ -6218,71 +6192,33 @@ void viewtoright_have_client(const Arg *arg) {
     }
   }
 
-  if (!(target & TAGMASK)) {
-    return;
+  if(found && selmon->pertag->curtag + n <= LENGTH(tags)) {
+    view(&(Arg){.ui =target_mask}, true);
   }
 
-  if (!selmon || (target) == selmon->tagset[selmon->seltags])
-    return;
-  selmon->seltags ^= 1; /* toggle sel tagset */
-  if (target) {
-    selmon->tagset[selmon->seltags] = target;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = selmon->pertag->curtag + n;
-  } else {
-    tmptag = selmon->pertag->prevtag;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = tmptag;
-  }
-
-  focusclient(focustop(selmon), 1);
-  arrange(selmon, true);
-  printstatus();
 }
 
 void viewtoright(const Arg *arg) {
-  if (selmon->isoverview || selmon->pertag->curtag == 0) {
+  unsigned int target = selmon->pertag->curtag + 1;
+  if (target > LENGTH(tags))
     return;
-  }
-  size_t tmptag;
-  unsigned int target = selmon->tagset[selmon->seltags];
-  target <<= 1;
+  unsigned int target_mask = (1 << target) & TAGMASK;
 
-  if (!selmon || (target) == selmon->tagset[selmon->seltags])
-    return;
-  if (!(target & TAGMASK)) {
-    return;
-  }
-  selmon->seltags ^= 1; /* toggle sel tagset */
-  if (target) {
-    selmon->tagset[selmon->seltags] = target;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = selmon->pertag->curtag + 1;
-  } else {
-    tmptag = selmon->pertag->prevtag;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = tmptag;
-  }
-
-  focusclient(focustop(selmon), 1);
-  arrange(selmon, true);
-  printstatus();
+  view(&(Arg){.ui =target_mask}, true);
 }
 
 void viewtoleft_have_client(const Arg *arg) {
   size_t tmptag;
   Client *c;
   unsigned int found = 0;
-  unsigned int n = 1;
-  unsigned int target = selmon->tagset[selmon->seltags];
+  unsigned int n = 0;
+  unsigned int target_mask = 1 << selmon->pertag->curtag;
+  unsigned target;
 
-  if (selmon->isoverview || selmon->pertag->curtag == 0) {
-    return;
-  }
-
-  for (target >>= 1; target > 0; target >>= 1, n++) {
+  for (target_mask >>= 1; target_mask & TAGMASK; target_mask >>= 1) {
+    n = n + 1;
     wl_list_for_each(c, &clients, link) {
-      if (target & c->tags) {
+      if (target_mask & c->tags) {
         found = 1;
         break;
       }
@@ -6292,26 +6228,10 @@ void viewtoleft_have_client(const Arg *arg) {
     }
   }
 
-  if (target == 0) {
-    return;
+  if(found && selmon->pertag->curtag - n >= 0) {
+    view(&(Arg){.ui =target_mask}, true);
   }
 
-  if (!selmon || (target) == selmon->tagset[selmon->seltags])
-    return;
-  selmon->seltags ^= 1; /* toggle sel tagset */
-  if (target) {
-    selmon->tagset[selmon->seltags] = target;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = selmon->pertag->curtag - n;
-  } else {
-    tmptag = selmon->pertag->prevtag;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = tmptag;
-  }
-
-  focusclient(focustop(selmon), 1);
-  arrange(selmon, true);
-  printstatus();
 }
 
 void tagtoleft(const Arg *arg) {
