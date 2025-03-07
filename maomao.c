@@ -689,7 +689,6 @@ static void configurex11(struct wl_listener *listener, void *data);
 static void createnotifyx11(struct wl_listener *listener, void *data);
 static void dissociatex11(struct wl_listener *listener, void *data);
 static void associatex11(struct wl_listener *listener, void *data);
-static Atom getatom(xcb_connection_t *xc, const char *name);
 static void sethints(struct wl_listener *listener, void *data);
 static void xwaylandready(struct wl_listener *listener, void *data);
 static struct wl_listener new_xwayland_surface = {.notify = createnotifyx11};
@@ -698,7 +697,6 @@ void free_config(void);
 // static struct wl_listener new_xwayland_surface = {.notify = createnotifyx11};
 // static struct wl_listener xwayland_ready = {.notify = xwaylandready};
 static struct wlr_xwayland *xwayland;
-static Atom netatom[NetLast];
 #endif
 
 /* configuration, allows nested code to access above variables */
@@ -2824,21 +2822,6 @@ void destroysessionlock(struct wl_listener *listener, void *data) {
   destroylock(lock, 0);
 }
 
-void // 17
-associatex11(struct wl_listener *listener, void *data) {
-  Client *c = wl_container_of(listener, c, associate);
-
-  LISTEN(&client_surface(c)->events.map, &c->map, mapnotify);
-  LISTEN(&client_surface(c)->events.unmap, &c->unmap, unmapnotify);
-}
-
-void // 17
-dissociatex11(struct wl_listener *listener, void *data) {
-  Client *c = wl_container_of(listener, c, dissociate);
-  wl_list_remove(&c->map.link);
-  wl_list_remove(&c->unmap.link);
-}
-
 Monitor *dirtomon(enum wlr_direction dir) {
   struct wlr_output *next;
   if (!wlr_output_layout_get(output_layout, selmon->wlr_output))
@@ -3065,6 +3048,9 @@ void focusclient(Client *c, int lift) {
     return;
 
   if (c && c->iskilling)
+    return;
+
+  if(c && !client_surface(c)->mapped)
     return;
 
   if (c && c->animation.tagouting && !c->animation.tagouting)
@@ -4822,6 +4808,10 @@ void show_hide_client(Client *c) {
 void handle_foreign_activate_request(struct wl_listener *listener, void *data) {
   Client *c = wl_container_of(listener, c, foreign_activate_request);
   unsigned int target;
+
+  if (c && c->swallowing)
+    return;
+
   if (c && !c->isminied && c == selmon->sel) {
     set_minized(c);
     return;
@@ -6524,6 +6514,9 @@ void activatex11(struct wl_listener *listener, void *data) {
   if (!c || c->iskilling)
     return;
 
+  if (c && c->swallowing)
+    return;
+
   /* Only "managed" windows can be activated */
   if (!client_is_unmanaged(c))
     wlr_xwayland_surface_activate(c->surface.xwayland, 1);
@@ -6544,111 +6537,102 @@ void activatex11(struct wl_listener *listener, void *data) {
   }
 }
 
-void // 0.7
-configurex11(struct wl_listener *listener, void *data) {
-  Client *c = wl_container_of(listener, c, configure);
-
-  if (!c || c->iskilling)
-    return;
-
-  struct wlr_xwayland_surface_configure_event *event = data;
-  if (!client_surface(c) || !client_surface(c)->mapped) {
-    wlr_xwayland_surface_configure(c->surface.xwayland, event->x, event->y,
-                                   event->width, event->height);
-    return;
-  }
-  if (client_is_unmanaged(c)) {
-    wlr_scene_node_set_position(&c->scene->node, event->x, event->y);
-    wlr_xwayland_surface_configure(c->surface.xwayland, event->x, event->y,
-                                   event->width, event->height);
-    return;
-  }
-  if ((c->isfloating && c != grabc) ||
-      !c->mon->pertag->ltidxs[c->mon->pertag->curtag]->arrange)
-    resize(c,
-           (struct wlr_box){.x = event->x - c->bw,
-                            .y = event->y - c->bw,
-                            .width = event->width + c->bw * 2,
-                            .height = event->height + c->bw * 2},
-           0);
-  else
-    arrange(c->mon, false);
+void
+configurex11(struct wl_listener *listener, void *data)
+{
+	Client *c = wl_container_of(listener, c, configure);
+	struct wlr_xwayland_surface_configure_event *event = data;
+	if (!client_surface(c) || !client_surface(c)->mapped) {
+		wlr_xwayland_surface_configure(c->surface.xwayland,
+				event->x, event->y, event->width, event->height);
+		return;
+	}
+	if (client_is_unmanaged(c)) {
+		wlr_scene_node_set_position(&c->scene->node, event->x, event->y);
+		wlr_xwayland_surface_configure(c->surface.xwayland,
+				event->x, event->y, event->width, event->height);
+		return;
+	}
+	if ((c->isfloating && c != grabc) || !c->mon->pertag->ltidxs[c->mon->pertag->curtag]->arrange) {
+		resize(c, (struct wlr_box){.x = event->x - c->bw,
+				.y = event->y - c->bw, .width = event->width + c->bw * 2,
+				.height = event->height + c->bw * 2}, 0);
+	} else {
+		arrange(c->mon,false);
+	}
 }
 
-/*创建窗口监测函数*/
-void createnotifyx11(struct wl_listener *listener, void *data) {
-  struct wlr_xwayland_surface *xsurface = data;
-  Client *c;
+void
+createnotifyx11(struct wl_listener *listener, void *data)
+{
+	struct wlr_xwayland_surface *xsurface = data;
+	Client *c;
 
-  /* Allocate a Client for this surface */
-  c = xsurface->data = ecalloc(1, sizeof(*c));
-  c->surface.xwayland = xsurface;
-  c->type = X11;
-  c->bw = borderpx;
+	/* Allocate a Client for this surface */
+	c = xsurface->data = ecalloc(1, sizeof(*c));
+	c->surface.xwayland = xsurface;
+	c->type = X11;
+	c->bw = client_is_unmanaged(c) ? 0 : borderpx;
 
-  /* Listen to the various events it can emit */
-  LISTEN(&xsurface->events.associate, &c->associate, associatex11);
-  LISTEN(&xsurface->events.dissociate, &c->dissociate, dissociatex11);
-  LISTEN(&xsurface->events.request_activate, &c->activate, activatex11);
-  LISTEN(&xsurface->events.request_configure, &c->configure, configurex11);
-  LISTEN(&xsurface->events.set_hints, &c->set_hints, sethints);
-  LISTEN(&xsurface->events.set_title, &c->set_title, updatetitle);
-  LISTEN(&xsurface->events.destroy, &c->destroy, destroynotify);
-  LISTEN(&xsurface->events.request_fullscreen, &c->fullscreen,
-         fullscreennotify);
+	/* Listen to the various events it can emit */
+	LISTEN(&xsurface->events.associate, &c->associate, associatex11);
+	LISTEN(&xsurface->events.destroy, &c->destroy, destroynotify);
+	LISTEN(&xsurface->events.dissociate, &c->dissociate, dissociatex11);
+	LISTEN(&xsurface->events.request_activate, &c->activate, activatex11);
+	LISTEN(&xsurface->events.request_configure, &c->configure, configurex11);
+	LISTEN(&xsurface->events.request_fullscreen, &c->fullscreen, fullscreennotify);
+	LISTEN(&xsurface->events.set_hints, &c->set_hints, sethints);
+	LISTEN(&xsurface->events.set_title, &c->set_title, updatetitle);
   LISTEN(&xsurface->events.request_maximize, &c->maximize, maximizenotify);
   LISTEN(&xsurface->events.request_minimize, &c->minimize, minimizenotify);
 }
 
-Atom getatom(xcb_connection_t *xc, const char *name) {
-  Atom atom = 0;
-  xcb_intern_atom_reply_t *reply;
-  xcb_intern_atom_cookie_t cookie = xcb_intern_atom(xc, 0, strlen(name), name);
-  if ((reply = xcb_intern_atom_reply(xc, cookie, NULL)))
-    atom = reply->atom;
-  free(reply);
+void
+associatex11(struct wl_listener *listener, void *data)
+{
+	Client *c = wl_container_of(listener, c, associate);
 
-  return atom;
+	LISTEN(&client_surface(c)->events.map, &c->map, mapnotify);
+	LISTEN(&client_surface(c)->events.unmap, &c->unmap, unmapnotify);
 }
 
-void sethints(struct wl_listener *listener, void *data) {
-  Client *c = wl_container_of(listener, c, set_hints);
-  if (c != focustop(selmon)) {
-    c->isurgent = xcb_icccm_wm_hints_get_urgency(c->surface.xwayland->hints);
-    printstatus();
-  }
+void
+dissociatex11(struct wl_listener *listener, void *data)
+{
+	Client *c = wl_container_of(listener, c, dissociate);
+	wl_list_remove(&c->map.link);
+	wl_list_remove(&c->unmap.link);
 }
 
-void xwaylandready(struct wl_listener *listener, void *data) {
-  struct wlr_xcursor *xcursor;
-  xcb_connection_t *xc = xcb_connect(xwayland->display_name, NULL);
-  int err = xcb_connection_has_error(xc);
-  if (err) {
-    fprintf(stderr,
-            "xcb_connect to X server failed with code %d\n. Continuing with "
-            "degraded functionality.\n",
-            err);
-    return;
-  }
+void
+sethints(struct wl_listener *listener, void *data)
+{
+	Client *c = wl_container_of(listener, c, set_hints);
+	struct wlr_surface *surface = client_surface(c);
+	if (c == focustop(selmon) || !c || !c->surface.xwayland->hints)
+		return;
 
-  /* Collect atoms we are interested in.  If getatom returns 0, we will
-   * not detect that window type. */
-  netatom[NetWMWindowTypeDialog] = getatom(xc, "_NET_WM_WINDOW_TYPE_DIALOG");
-  netatom[NetWMWindowTypeSplash] = getatom(xc, "_NET_WM_WINDOW_TYPE_SPLASH");
-  netatom[NetWMWindowTypeToolbar] = getatom(xc, "_NET_WM_WINDOW_TYPE_TOOLBAR");
-  netatom[NetWMWindowTypeUtility] = getatom(xc, "_NET_WM_WINDOW_TYPE_UTILITY");
+	c->isurgent = xcb_icccm_wm_hints_get_urgency(c->surface.xwayland->hints);
+	printstatus();
 
-  /* assign the one and only seat */
-  wlr_xwayland_set_seat(xwayland, seat);
+	if (c->isurgent && surface && surface->mapped)
+		client_set_border_color(c, urgentcolor);
+}
 
-  /* Set the default XWayland cursor to match the rest of dwl. */
-  if ((xcursor = wlr_xcursor_manager_get_xcursor(cursor_mgr, "left_ptr", 1)))
-    wlr_xwayland_set_cursor(
-        xwayland, xcursor->images[0]->buffer, xcursor->images[0]->width * 4,
-        xcursor->images[0]->width, xcursor->images[0]->height,
-        xcursor->images[0]->hotspot_x, xcursor->images[0]->hotspot_y);
+void
+xwaylandready(struct wl_listener *listener, void *data)
+{
+	struct wlr_xcursor *xcursor;
 
-  xcb_disconnect(xc);
+	/* assign the one and only seat */
+	wlr_xwayland_set_seat(xwayland, seat);
+
+	/* Set the default XWayland cursor to match the rest of dwl. */
+	if ((xcursor = wlr_xcursor_manager_get_xcursor(cursor_mgr, "default", 1)))
+		wlr_xwayland_set_cursor(xwayland,
+				xcursor->images[0]->buffer, xcursor->images[0]->width * 4,
+				xcursor->images[0]->width, xcursor->images[0]->height,
+				xcursor->images[0]->hotspot_x, xcursor->images[0]->hotspot_y);
 }
 #endif
 
