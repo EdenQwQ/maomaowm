@@ -5129,7 +5129,7 @@ void setup(void) {
   input_relay = calloc(1, sizeof(*input_relay));
   dwl_input_method_relay_init(input_relay);
 #endif
-  wl_global_create(dpy, &zdwl_ipc_manager_v2_interface, 1, NULL,
+  wl_global_create(dpy, &zdwl_ipc_manager_v2_interface, 2, NULL,
                    dwl_ipc_manager_bind);
 
   // 创建顶层管理句柄
