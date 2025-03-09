@@ -4872,7 +4872,7 @@ void signalhandler(int signalnumber) {
   }
 
   // 打开日志文件
-  FILE *fp = fopen(filename, "a");
+  FILE *fp = fopen(filename, "w");
   if (!fp) {
     // 如果无法打开日志文件，则不处理
     return;
