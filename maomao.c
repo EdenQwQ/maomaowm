@@ -4503,8 +4503,8 @@ setfloating(Client *c, int floating) {
 
   target_box = c->geom;
 
-  if (c->istiled) {
-    if (!c->swallowing && !c->is_open_animation) {
+  if (c->isfloating) {
+    if (c->istiled && !c->swallowing && !c->is_open_animation) {
       target_box.height = target_box.height * 0.8;
       target_box.width = target_box.width * 0.8;
     }
