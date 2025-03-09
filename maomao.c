@@ -3761,138 +3761,125 @@ monocle(Monitor *m, unsigned int gappo, unsigned int gappi) {
     wlr_scene_node_raise_to_top(&c->scene->node);
 }
 
-void motionabsolute(struct wl_listener *listener, void *data) {
-  /* This event is forwarded by the cursor when a pointer emits an _absolute_
-   * motion event, from 0..1 on each axis. This happens, for example, when
-   * wlroots is running under a Wayland window rather than KMS+DRM, and you
-   * move the mouse over the window. You could enter the window from any edge,
-   * so we have to warp the mouse there. There is also some hardware which
-   * emits these events. */
-  struct wlr_pointer_motion_absolute_event *event = data;
-  double lx, ly, dx, dy;
+void
+motionabsolute(struct wl_listener *listener, void *data)
+{
+	/* This event is forwarded by the cursor when a pointer emits an _absolute_
+	 * motion event, from 0..1 on each axis. This happens, for example, when
+	 * wlroots is running under a Wayland window rather than KMS+DRM, and you
+	 * move the mouse over the window. You could enter the window from any edge,
+	 * so we have to warp the mouse there. There is also some hardware which
+	 * emits these events. */
+	struct wlr_pointer_motion_absolute_event *event = data;
+	double lx, ly, dx, dy;
 
-  if (!event->time_msec) /* this is 0 with virtual pointers */
-    wlr_cursor_warp_absolute(cursor, &event->pointer->base, event->x, event->y);
+	if (!event->time_msec) /* this is 0 with virtual pointers */
+		wlr_cursor_warp_absolute(cursor, &event->pointer->base, event->x, event->y);
 
-  wlr_cursor_absolute_to_layout_coords(cursor, &event->pointer->base, event->x,
-                                       event->y, &lx, &ly);
-  dx = lx - cursor->x;
-  dy = ly - cursor->y;
-  motionnotify(event->time_msec, &event->pointer->base, dx, dy, dx, dy);
+	wlr_cursor_absolute_to_layout_coords(cursor, &event->pointer->base, event->x, event->y, &lx, &ly);
+	dx = lx - cursor->x;
+	dy = ly - cursor->y;
+	motionnotify(event->time_msec, &event->pointer->base, dx, dy, dx, dy);
 }
 
-void // fix for 0.5
-motionnotify(uint32_t time, struct wlr_input_device *device, double dx,
-             double dy, double dx_unaccel, double dy_unaccel) {
-  double sx = 0, sy = 0, sx_confined, sy_confined;
-  Client *c = NULL, *w = NULL;
-  LayerSurface *l = NULL;
-  struct wlr_surface *surface = NULL;
-  struct wlr_pointer_constraint_v1 *constraint;
+void
+motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double dy,
+		double dx_unaccel, double dy_unaccel)
+{
+	double sx = 0, sy = 0, sx_confined, sy_confined;
+	Client *c = NULL, *w = NULL;
+	LayerSurface *l = NULL;
+	struct wlr_surface *surface = NULL;
+	struct wlr_pointer_constraint_v1 *constraint;
 
-  /* Find the client under the pointer and send the event along. */
-  xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
+	/* Find the client under the pointer and send the event along. */
+	xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
 
-  if (cursor_mode == CurPressed && !seat->drag &&
-      surface != seat->pointer_state.focused_surface &&
-      toplevel_from_wlr_surface(seat->pointer_state.focused_surface, &w, &l) >=
-          0) {
-    c = w;
-    surface = seat->pointer_state.focused_surface;
-    sx = cursor->x - (l ? l->geom.x : w->geom.x);
-    sy = cursor->y - (l ? l->geom.y : w->geom.y);
-  }
+	if (cursor_mode == CurPressed && !seat->drag
+			&& surface != seat->pointer_state.focused_surface
+			&& toplevel_from_wlr_surface(seat->pointer_state.focused_surface, &w, &l) >= 0) {
+		c = w;
+		surface = seat->pointer_state.focused_surface;
+		sx = cursor->x - (l ? l->scene->node.x : w->geom.x);
+		sy = cursor->y - (l ? l->scene->node.y : w->geom.y);
+	}
 
-  /* time is 0 in internal calls meant to restore pointer focus. */
-  if (time) {
-    wlr_relative_pointer_manager_v1_send_relative_motion(
-        relative_pointer_mgr, seat, (uint64_t)time * 1000, dx, dy, dx_unaccel,
-        dy_unaccel);
+	/* time is 0 in internal calls meant to restore pointer focus. */
+	if (time) {
+		wlr_relative_pointer_manager_v1_send_relative_motion(
+				relative_pointer_mgr, seat, (uint64_t)time * 1000,
+				dx, dy, dx_unaccel, dy_unaccel);
 
-    wl_list_for_each(constraint, &pointer_constraints->constraints, link)
-        cursorconstrain(constraint);
+		wl_list_for_each(constraint, &pointer_constraints->constraints, link)
+			cursorconstrain(constraint);
 
-    if (active_constraint && cursor_mode != CurResize &&
-        cursor_mode != CurMove) {
-      toplevel_from_wlr_surface(active_constraint->surface, &c, NULL);
-      if (c &&
-          active_constraint->surface == seat->pointer_state.focused_surface) {
-        sx = cursor->x - c->geom.x - c->bw;
-        sy = cursor->y - c->geom.y - c->bw;
-        if (wlr_region_confine(&active_constraint->region, sx, sy, sx + dx,
-                               sy + dy, &sx_confined, &sy_confined)) {
-          dx = sx_confined - sx;
-          dy = sy_confined - sy;
-        }
+		if (active_constraint && cursor_mode != CurResize && cursor_mode != CurMove) {
+			toplevel_from_wlr_surface(active_constraint->surface, &c, NULL);
+			if (c && active_constraint->surface == seat->pointer_state.focused_surface) {
+				sx = cursor->x - c->geom.x - c->bw;
+				sy = cursor->y - c->geom.y - c->bw;
+				if (wlr_region_confine(&active_constraint->region, sx, sy,
+						sx + dx, sy + dy, &sx_confined, &sy_confined)) {
+					dx = sx_confined - sx;
+					dy = sy_confined - sy;
+				}
 
-        if (active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED)
-          return;
-      }
-    }
+				if (active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED)
+					return;
+			}
+		}
 
-    wlr_cursor_move(cursor, device, dx, dy);
-    wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+		wlr_cursor_move(cursor, device, dx, dy);
+		wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
 
-    /* Update selmon (even while dragging a window) */
-    if (sloppyfocus)
-      selmon = xytomon(cursor->x, cursor->y);
-  }
+		/* Update selmon (even while dragging a window) */
+		if (sloppyfocus)
+			selmon = xytomon(cursor->x, cursor->y);
+	}
 
-  /* Update drag icon's position */
-  wlr_scene_node_set_position(&drag_icon->node, cursor->x, cursor->y);
+	/* Update drag icon's position */
+	wlr_scene_node_set_position(&drag_icon->node, (int)round(cursor->x), (int)round(cursor->y));
 
-  /* If we are currently grabbing the mouse, handle and return */
-  if (cursor_mode == CurMove) {
-    /* Move the grabbed client to the new position. */
-    grabc->oldgeom = (struct wlr_box){.x = cursor->x - grabcx,
-                                      .y = cursor->y - grabcy,
+	/* If we are currently grabbing the mouse, handle and return */
+	if (cursor_mode == CurMove) {
+		/* Move the grabbed client to the new position. */
+    grabc->oldgeom = (struct wlr_box){.x = (int)round(cursor->x) - grabcx,
+                                      .y = (int)round(cursor->y) - grabcy,
                                       .width = grabc->geom.width,
                                       .height = grabc->geom.height};
-    resize(grabc, grabc->oldgeom, 1);
-    return;
-  } else if (cursor_mode == CurResize) {
+		resize(grabc, grabc->oldgeom, 1);
+		return;
+	} else if (cursor_mode == CurResize) {
     grabc->oldgeom = (struct wlr_box){.x = grabc->geom.x,
                                       .y = grabc->geom.y,
-                                      .width = cursor->x - grabc->geom.x,
-                                      .height = cursor->y - grabc->geom.y};
-    resize(grabc, grabc->oldgeom, 1);
-    return;
-  }
+                                      .width = (int)round(cursor->x) - grabc->geom.x,
+                                      .height = (int)round(cursor->y) - grabc->geom.y};
+		resize(grabc, grabc->oldgeom, 1);
+		return;
+	}
 
-  /* If there's no client surface under the cursor, set the cursor image to a
-   * default. This is what makes the cursor image appear when you move it
-   * off of a client or over its border. */
-  if (!surface && !seat->drag)
-    wlr_cursor_set_xcursor(cursor, cursor_mgr, "left_ptr");
+	/* If there's no client surface under the cursor, set the cursor image to a
+	 * default. This is what makes the cursor image appear when you move it
+	 * off of a client or over its border. */
+	if (!surface && !seat->drag)
+		wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 
-  pointerfocus(c, surface, sx, sy, time);
+	pointerfocus(c, surface, sx, sy, time);
 }
 
-void // fix for 0.5 光标相对位置移动事件处理
-motionrelative(struct wl_listener *listener, void *data) {
-  /* This event is forwarded by the cursor when a pointer emits a _relative_
-   * pointer motion event (i.e. a delta) */
-  struct wlr_pointer_motion_event *event = data;
-  /* The cursor doesn't move unless we tell it to. The cursor automatically
-   * handles constraining the motion to the output layout, as well as any
-   * special configuration applied for the specific input device which
-   * generated the event. You can pass NULL for the device if you want to move
-   * the cursor around without any input. */
-
-  // //处理一些事件,比如窗口聚焦,图层聚焦通知到客户端
-  // motionnotify(event->time_msec);
-  // //扩展事件通知,没有这个鼠标移动的时候滑轮将无法使用
-  // wlr_relative_pointer_manager_v1_send_relative_motion(
-  // 	pointer_manager,
-  // 	seat, (uint64_t)(event->time_msec) * 1000,
-  // 	event->delta_x, event->delta_y,
-  // 	event->unaccel_dx, event->unaccel_dy);
-  // //通知光标设备移动
-  // wlr_cursor_move(cursor, &event->pointer->base, event->delta_x,
-  // event->delta_y);
-  motionnotify(event->time_msec, &event->pointer->base, event->delta_x,
-               event->delta_y, event->unaccel_dx, event->unaccel_dy);
-  // 鼠标左下热区判断是否触发
+void
+motionrelative(struct wl_listener *listener, void *data)
+{
+	/* This event is forwarded by the cursor when a pointer emits a _relative_
+	 * pointer motion event (i.e. a delta) */
+	struct wlr_pointer_motion_event *event = data;
+	/* The cursor doesn't move unless we tell it to. The cursor automatically
+	 * handles constraining the motion to the output layout, as well as any
+	 * special configuration applied for the specific input device which
+	 * generated the event. You can pass NULL for the device if you want to move
+	 * the cursor around without any input. */
+	motionnotify(event->time_msec, &event->pointer->base, event->delta_x, event->delta_y,
+			event->unaccel_dx, event->unaccel_dy);
   toggle_hotarea(cursor->x, cursor->y);
 }
 
