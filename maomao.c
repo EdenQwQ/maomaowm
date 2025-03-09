@@ -4150,6 +4150,7 @@ void setborder_color(Client *c) {
   if (c->isurgent) {
     for (i = 0; i < 4; i++)
       wlr_scene_rect_set_color(c->border[i], urgentcolor);
+    return;
   }
   if (c->is_in_scratchpad && c == selmon->sel) {
     for (i = 0; i < 4; i++)
