@@ -5880,11 +5880,11 @@ void init_fadeout_client(Client *c) {
     fadeout_cient->current.x = 0;                        // x无偏差，垂直划出
   } else {
     fadeout_cient->current.y =
-        (c->geom.height - c->geom.height * zoom_initial_ratio) / 2;
+        (fadeout_cient->geom.height - fadeout_cient->geom.height * zoom_initial_ratio) / 2;
     fadeout_cient->current.x =
-        (c->geom.width - c->geom.width * zoom_initial_ratio) / 2;
-    fadeout_cient->current.width = c->geom.width * zoom_initial_ratio;
-    fadeout_cient->current.height = c->geom.height * zoom_initial_ratio;
+        (fadeout_cient->geom.width - fadeout_cient->geom.width * zoom_initial_ratio) / 2;
+    fadeout_cient->current.width = fadeout_cient->geom.width * zoom_initial_ratio;
+    fadeout_cient->current.height = fadeout_cient->geom.height * zoom_initial_ratio;
   }
 
   fadeout_cient->animation.passed_frames = 0;
