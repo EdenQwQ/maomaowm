@@ -256,7 +256,7 @@ struct Client {
 typedef struct {
   struct wl_list link;
   struct wl_resource *resource;
-  Monitor *monitor;
+  Monitor *mon;
 } DwlIpcOutput;
 
 typedef struct {
@@ -475,6 +475,8 @@ static void motionnotify(uint32_t time, struct wlr_input_device *device,
 static void motionrelative(struct wl_listener *listener, void *data);
 
 static void reset_foreign_tolevel(Client *c);
+static void remove_foreign_topleve(Client *c);
+static void add_foreign_topleve(Client *c);
 static void exchange_two_client(Client *c1, Client *c2);
 static void outputmgrapply(struct wl_listener *listener, void *data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1 *config,
@@ -562,6 +564,7 @@ void scene_buffer_apply_opacity(struct wlr_scene_buffer *buffer, int sx, int sy,
 
 Client *direction_select(const Arg *arg);
 void bind_to_view(const Arg *arg);
+void view_in_mon(const Arg *arg, bool want_animation, Monitor *m);
 void toggletag(const Arg *arg);
 void toggleview(const Arg *arg);
 void tag(const Arg *arg);
@@ -1219,11 +1222,12 @@ void show_scratchpad(Client *c) {
   setborder_color(c);
 }
 
-void reset_foreign_tolevel(Client *c) {
+void remove_foreign_topleve(Client *c) {
   wlr_foreign_toplevel_handle_v1_destroy(c->foreign_toplevel);
-  c->foreign_toplevel = NULL;
-  // printstatus();
-  // 创建外部顶层窗口的句柄,每一个顶层窗口都有一个
+  c->foreign_toplevel = NULL;  
+}
+
+void add_foreign_toplevel(Client *c) {
   c->foreign_toplevel =
       wlr_foreign_toplevel_handle_v1_create(foreign_toplevel_manager);
   // 监听来自外部对于窗口的事件请求
@@ -1251,6 +1255,12 @@ void reset_foreign_tolevel(Client *c) {
                                                 c->mon->wlr_output);
   }
 }
+
+void reset_foreign_tolevel(Client *c) {
+ remove_foreign_topleve(c);
+ add_foreign_toplevel(c);
+}
+
 
 pid_t
 getparentprocess(pid_t p)
@@ -1306,8 +1316,15 @@ swallow(Client *c, Client *w)
 	c->geom = w->geom;
 	wl_list_insert(&w->link, &c->link);
 	wl_list_insert(&w->flink, &c->flink);
+
+  if(w->foreign_toplevel)
+    remove_foreign_topleve(w);
+
 	wlr_scene_node_set_enabled(&w->scene->node, 0);
 	wlr_scene_node_set_enabled(&c->scene->node, 1);
+
+  if(!c->foreign_toplevel && c->mon)
+    add_foreign_toplevel(c);
 }
 
 void toggle_scratchpad(const Arg *arg) {
@@ -2836,67 +2853,69 @@ Monitor *dirtomon(enum wlr_direction dir) {
   return selmon;
 }
 
-void dwl_ipc_manager_bind(struct wl_client *client, void *data,
-                          uint32_t version, uint32_t id) {
-  struct wl_resource *manager_resource =
-      wl_resource_create(client, &zdwl_ipc_manager_v2_interface, version, id);
-  if (!manager_resource) {
-    wl_client_post_no_memory(client);
-    return;
-  }
-  wl_resource_set_implementation(manager_resource, &dwl_manager_implementation,
-                                 NULL, dwl_ipc_manager_destroy);
+void
+dwl_ipc_manager_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id)
+{
+	struct wl_resource *manager_resource = wl_resource_create(client, &zdwl_ipc_manager_v2_interface, version, id);
+	if (!manager_resource) {
+		wl_client_post_no_memory(client);
+		return;
+	}
+	wl_resource_set_implementation(manager_resource, &dwl_manager_implementation, NULL, dwl_ipc_manager_destroy);
 
-  zdwl_ipc_manager_v2_send_tags(manager_resource, LENGTH(tags));
+	zdwl_ipc_manager_v2_send_tags(manager_resource, LENGTH(tags));
 
-  for (int i = 0; i < LENGTH(layouts); i++)
-    zdwl_ipc_manager_v2_send_layout(manager_resource, layouts[i].symbol);
+	for (unsigned int i = 0; i < LENGTH(layouts); i++)
+		zdwl_ipc_manager_v2_send_layout(manager_resource, layouts[i].symbol);
 }
 
-void dwl_ipc_manager_destroy(struct wl_resource *resource) {
-  /* No state to destroy */
+void
+dwl_ipc_manager_destroy(struct wl_resource *resource)
+{
+	/* No state to destroy */
 }
 
-void dwl_ipc_manager_get_output(struct wl_client *client,
-                                struct wl_resource *resource, uint32_t id,
-                                struct wl_resource *output) {
-  DwlIpcOutput *ipc_output;
-  Monitor *monitor = wlr_output_from_resource(output)->data;
-  struct wl_resource *output_resource =
-      wl_resource_create(client, &zdwl_ipc_output_v2_interface,
-                         wl_resource_get_version(resource), id);
-  if (!output_resource)
-    return;
+void
+dwl_ipc_manager_get_output(struct wl_client *client, struct wl_resource *resource, uint32_t id, struct wl_resource *output)
+{
+	DwlIpcOutput *ipc_output;
+	Monitor *monitor = wlr_output_from_resource(output)->data;
+	struct wl_resource *output_resource = wl_resource_create(client, &zdwl_ipc_output_v2_interface, wl_resource_get_version(resource), id);
+	if (!output_resource)
+		return;
 
-  ipc_output = ecalloc(1, sizeof(*ipc_output));
-  ipc_output->resource = output_resource;
-  ipc_output->monitor = monitor;
-  wl_resource_set_implementation(output_resource, &dwl_output_implementation,
-                                 ipc_output, dwl_ipc_output_destroy);
-  wl_list_insert(&monitor->dwl_ipc_outputs, &ipc_output->link);
-  dwl_ipc_output_printstatus_to(ipc_output);
+	ipc_output = ecalloc(1, sizeof(*ipc_output));
+	ipc_output->resource = output_resource;
+	ipc_output->mon = monitor;
+	wl_resource_set_implementation(output_resource, &dwl_output_implementation, ipc_output, dwl_ipc_output_destroy);
+	wl_list_insert(&monitor->dwl_ipc_outputs, &ipc_output->link);
+	dwl_ipc_output_printstatus_to(ipc_output);
 }
 
-void dwl_ipc_manager_release(struct wl_client *client,
-                             struct wl_resource *resource) {
-  wl_resource_destroy(resource);
+void
+dwl_ipc_manager_release(struct wl_client *client, struct wl_resource *resource)
+{
+	wl_resource_destroy(resource);
 }
 
-// 在外部ipc客户端结束的时候会发出销毁请求,比如kill掉waybar,就会销毁waybar绑定的ipc_output
-static void dwl_ipc_output_destroy(struct wl_resource *resource) {
-  DwlIpcOutput *ipc_output = wl_resource_get_user_data(resource);
-  wl_list_remove(&ipc_output->link);
-  free(ipc_output);
+static void
+dwl_ipc_output_destroy(struct wl_resource *resource)
+{
+	DwlIpcOutput *ipc_output = wl_resource_get_user_data(resource);
+	wl_list_remove(&ipc_output->link);
+	free(ipc_output);
 }
 
-void dwl_ipc_output_printstatus(Monitor *monitor) {
-  DwlIpcOutput *ipc_output;
-  wl_list_for_each(ipc_output, &monitor->dwl_ipc_outputs, link)
-      dwl_ipc_output_printstatus_to(ipc_output);
+void
+dwl_ipc_output_printstatus(Monitor *monitor)
+{
+	DwlIpcOutput *ipc_output;
+	wl_list_for_each(ipc_output, &monitor->dwl_ipc_outputs, link)
+		dwl_ipc_output_printstatus_to(ipc_output);
 }
 
 void dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output) {
-  Monitor *monitor = ipc_output->monitor;
+  Monitor *monitor = ipc_output->mon;
   Client *c, *focused;
   int tagmask, state, numclients, focused_client, tag;
   const char *title, *appid, *symbol;
@@ -2928,30 +2947,29 @@ void dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output) {
 
         numclients++;
       }
-      zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state,
-      numclients,
+      zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state, numclients,
                                   focused_client);
     }
   }
 
-  // for (tag = 0; tag < LENGTH(tags); tag++) {
-  //   numclients = state = focused_client = 0;
-  //   tagmask = 1 << tag;
-  //   if ((tagmask & monitor->tagset[monitor->seltags]) != 0)
-  //     state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
-  //   wl_list_for_each(c, &clients, link) {
-  //     if (c->mon != monitor)
-  //       continue;
-  //     if (!(c->tags & tagmask))
-  //       continue;
-  //     if (c == focused)
-  //       focused_client = 1;
-  //     if (c->isurgent)
-  //       state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT;
-  //     numclients++;
-  //   }
-  //   zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state, numclients,
-  //                               focused_client);
+  // for ( tag = 0 ; tag < LENGTH(tags); tag++) {
+  //     numclients = state = focused_client = 0;
+  //     tagmask = 1 << tag;
+  //     if ((tagmask & monitor->tagset[monitor->seltags]) != 0)
+  //         state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
+  //     wl_list_for_each(c, &clients, link) {
+  //         if (c->mon != monitor)
+  //             continue;
+  //         if (!(c->tags & tagmask))
+  //             continue;
+  //         if (c == focused)
+  //             focused_client = 1;
+  //         if (c->isurgent)
+  //             state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT;
+  //         numclients++;
+  //     }
+  //     zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state,
+  //     numclients, focused_client);
   // }
 
   title = focused ? client_get_title(focused) : "";
@@ -2959,39 +2977,46 @@ void dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output) {
   symbol = monitor->pertag->ltidxs[monitor->pertag->curtag]->symbol;
 
   zdwl_ipc_output_v2_send_layout(
-      ipc_output->resource,
-      monitor->pertag->ltidxs[monitor->pertag->curtag] - layouts);
+    ipc_output->resource,
+    monitor->pertag->ltidxs[monitor->pertag->curtag] - layouts);
   zdwl_ipc_output_v2_send_title(ipc_output->resource, title ? title : broken);
   zdwl_ipc_output_v2_send_appid(ipc_output->resource, appid ? appid : broken);
   zdwl_ipc_output_v2_send_layout_symbol(ipc_output->resource, symbol);
-  zdwl_ipc_output_v2_send_frame(ipc_output->resource);
+	if (wl_resource_get_version(ipc_output->resource) >= ZDWL_IPC_OUTPUT_V2_FULLSCREEN_SINCE_VERSION) {
+		zdwl_ipc_output_v2_send_fullscreen(ipc_output->resource, focused ? focused->isfullscreen : 0);
+	}
+	if (wl_resource_get_version(ipc_output->resource) >= ZDWL_IPC_OUTPUT_V2_FLOATING_SINCE_VERSION) {
+		zdwl_ipc_output_v2_send_floating(ipc_output->resource, focused ? focused->isfloating : 0);
+	}
+	zdwl_ipc_output_v2_send_frame(ipc_output->resource);
 }
 
-void dwl_ipc_output_set_client_tags(struct wl_client *client,
-                                    struct wl_resource *resource,
-                                    uint32_t and_tags, uint32_t xor_tags) {
-  DwlIpcOutput *ipc_output;
-  Monitor *monitor;
-  Client *selected_client;
-  unsigned int newtags = 0;
+void
+dwl_ipc_output_set_client_tags(struct wl_client *client, struct wl_resource *resource, uint32_t and_tags, uint32_t xor_tags)
+{
+	DwlIpcOutput *ipc_output;
+	Monitor *monitor;
+	Client *selected_client;
+	unsigned int newtags = 0;
 
-  ipc_output = wl_resource_get_user_data(resource);
-  if (!ipc_output)
-    return;
+	ipc_output = wl_resource_get_user_data(resource);
+	if (!ipc_output)
+		return;
 
-  monitor = ipc_output->monitor;
-  selected_client = focustop(monitor);
-  if (!selected_client)
-    return;
+	monitor = ipc_output->mon;
+	selected_client = focustop(monitor);
+	if (!selected_client)
+		return;
 
-  newtags = (selected_client->tags & and_tags) ^ xor_tags;
-  if (!newtags)
-    return;
+	newtags = (selected_client->tags & and_tags) ^ xor_tags;
+	if (!newtags)
+		return;
 
-  selected_client->tags = newtags;
-  focusclient(focustop(selmon), 1);
-  arrange(selmon, true);
-  printstatus();
+	selected_client->tags = newtags;
+	if (selmon == monitor)
+		focusclient(focustop(monitor), 1);
+	arrange(selmon,false);
+	printstatus();
 }
 
 void dwl_ipc_output_set_layout(struct wl_client *client,
@@ -3003,7 +3028,7 @@ void dwl_ipc_output_set_layout(struct wl_client *client,
   if (!ipc_output)
     return;
 
-  monitor = ipc_output->monitor;
+  monitor = ipc_output->mon;
   if (index >= LENGTH(layouts))
     index = 0;
 
@@ -3012,32 +3037,25 @@ void dwl_ipc_output_set_layout(struct wl_client *client,
   printstatus();
 }
 
-void dwl_ipc_output_set_tags(struct wl_client *client,
-                             struct wl_resource *resource, uint32_t tagmask,
-                             uint32_t toggle_tagset) {
-  DwlIpcOutput *ipc_output;
-  Monitor *monitor;
-  unsigned int newtags = tagmask & TAGMASK;
+void
+dwl_ipc_output_set_tags(struct wl_client *client, struct wl_resource *resource, uint32_t tagmask, uint32_t toggle_tagset)
+{
+	DwlIpcOutput *ipc_output;
+	Monitor *monitor;
+	unsigned int newtags = tagmask & TAGMASK;
 
-  ipc_output = wl_resource_get_user_data(resource);
-  if (!ipc_output)
-    return;
-  monitor = ipc_output->monitor;
+	ipc_output = wl_resource_get_user_data(resource);
+	if (!ipc_output)
+		return;
+	monitor = ipc_output->mon;
 
-  if (!newtags || newtags == monitor->tagset[monitor->seltags])
-    return;
-  if (toggle_tagset)
-    monitor->seltags ^= 1;
-
-  monitor->tagset[monitor->seltags] = newtags;
-  focusclient(focustop(monitor), 1);
-  arrange(monitor, true);
-  printstatus();
+  view_in_mon(&(Arg){.ui = newtags}, true,monitor);
 }
 
-void dwl_ipc_output_release(struct wl_client *client,
-                            struct wl_resource *resource) {
-  wl_resource_destroy(resource);
+void
+dwl_ipc_output_release(struct wl_client *client, struct wl_resource *resource)
+{
+	wl_resource_destroy(resource);
 }
 
 void focusclient(Client *c, int lift) {
@@ -3642,34 +3660,8 @@ mapnotify(struct wl_listener *listener, void *data) {
     applyrules(c);
   }
 
-  // 创建外部顶层窗口的句柄,每一个顶层窗口都有一个
-  c->foreign_toplevel =
-      wlr_foreign_toplevel_handle_v1_create(foreign_toplevel_manager);
-
-  // 监听来自外部对于窗口的事件请求
-  if (c->foreign_toplevel) {
-    LISTEN(&(c->foreign_toplevel->events.request_activate),
-           &c->foreign_activate_request, handle_foreign_activate_request);
-    LISTEN(&(c->foreign_toplevel->events.request_fullscreen),
-           &c->foreign_fullscreen_request, handle_foreign_fullscreen_request);
-    LISTEN(&(c->foreign_toplevel->events.request_close),
-           &c->foreign_close_request, handle_foreign_close_request);
-    LISTEN(&(c->foreign_toplevel->events.destroy), &c->foreign_destroy,
-           handle_foreign_destroy);
-    // 设置外部顶层句柄的id为应用的id
-    const char *appid;
-    appid = client_get_appid(c);
-    if (appid)
-      wlr_foreign_toplevel_handle_v1_set_app_id(c->foreign_toplevel, appid);
-    // 设置外部顶层句柄的title为应用的title
-    const char *title;
-    title = client_get_title(c);
-    if (title)
-      wlr_foreign_toplevel_handle_v1_set_title(c->foreign_toplevel, title);
-    // 设置外部顶层句柄的显示监视器为当前监视器
-    wlr_foreign_toplevel_handle_v1_output_enter(c->foreign_toplevel,
-                                                selmon->wlr_output);
-  }
+  if(!c->foreign_toplevel && c->mon)
+    add_foreign_toplevel(c);
 
   if (selmon->sel && selmon->sel->foreign_toplevel)
     wlr_foreign_toplevel_handle_v1_set_activated(selmon->sel->foreign_toplevel,
@@ -4838,10 +4830,6 @@ void handle_foreign_fullscreen_request(struct wl_listener *listener,
 
 void handle_foreign_close_request(struct wl_listener *listener, void *data) {
   Client *c = wl_container_of(listener, c, foreign_close_request);
-
-  if (c && c->swallowing)
-    return;
-    
   if (c) {
     pending_kill_client(c);
   }
@@ -5141,7 +5129,7 @@ void setup(void) {
   input_relay = calloc(1, sizeof(*input_relay));
   dwl_input_method_relay_init(input_relay);
 #endif
-  wl_global_create(dpy, &zdwl_ipc_manager_v2_interface, 1, NULL,
+  wl_global_create(dpy, &zdwl_ipc_manager_v2_interface, 2, NULL,
                    dwl_ipc_manager_bind);
 
   // 创建顶层管理句柄
@@ -6193,37 +6181,41 @@ urgent(struct wl_listener *listener, void *data) {
 
 void bind_to_view(const Arg *arg) { view(arg, true); }
 
-void view(const Arg *arg, bool want_animation) {
+void view_in_mon(const Arg *arg, bool want_animation, Monitor *m) {
   size_t i, tmptag;
 
-  if (!selmon || (arg->ui != ~0 && selmon->isoverview)) {
+  if (!m || (arg->ui != ~0 && m->isoverview)) {
     return;
   }
-  if ((selmon->tagset[selmon->seltags] & arg->ui & TAGMASK) != 0) {
+  if ((m->tagset[m->seltags] & arg->ui & TAGMASK) != 0) {
     want_animation = false;
   }
 
-  selmon->seltags ^= 1; /* toggle sel tagset */
+  m->seltags ^= 1; /* toggle sel tagset */
   if (arg->ui & TAGMASK) {
-    selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
+    m->tagset[m->seltags] = arg->ui & TAGMASK;
+    m->pertag->prevtag = m->pertag->curtag;
 
     if (arg->ui == ~0)
-      selmon->pertag->curtag = 0;
+    m->pertag->curtag = 0;
     else {
       for (i = 0; !(arg->ui & 1 << i); i++)
         ;
-      selmon->pertag->curtag = i + 1;
+        m->pertag->curtag = i + 1;
     }
   } else {
-    tmptag = selmon->pertag->prevtag;
-    selmon->pertag->prevtag = selmon->pertag->curtag;
-    selmon->pertag->curtag = tmptag;
+    tmptag = m->pertag->prevtag;
+    m->pertag->prevtag = m->pertag->curtag;
+    m->pertag->curtag = tmptag;
   }
 
-  focusclient(focustop(selmon), 1);
-  arrange(selmon, want_animation);
+  focusclient(focustop(m), 1);
+  arrange(m, want_animation);
   printstatus();
+}
+
+void view(const Arg *arg, bool want_animation) {
+  view_in_mon(arg, want_animation, selmon);
 }
 
 void viewtoleft(const Arg *arg) {
