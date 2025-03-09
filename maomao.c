@@ -1033,12 +1033,12 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
   if (c->animation.running && c->animation.action != MOVE) {
     if (c->animation.current.x < c->mon->m.x) {
       wlr_scene_rect_set_size(c->border[2], 0, 0);
-    } else if (c->animation.current.x + c->geom.width >
+    } else if (c->animation.current.x + c->animation.current.width >
                c->mon->m.x + c->mon->m.width) {
       wlr_scene_rect_set_size(c->border[3], 0, 0);
     } else if (c->animation.current.y < c->mon->m.y) {
       wlr_scene_rect_set_size(c->border[0], 0, 0);
-    } else if (c->animation.current.y + c->geom.height >
+    } else if (c->animation.current.y + c->animation.current.height >
                c->mon->m.y + c->mon->m.height) {
       wlr_scene_rect_set_size(c->border[1], 0, 0);
     }
@@ -1088,13 +1088,13 @@ void client_apply_clip(Client *c) {
     clip_box.y = 0;
   }
 
-  // make tagout tagin animations not visible in other monitors
+  // // make tagout tagin animations not visible in other monitors
   if (c->animation.running && c->animation.action != MOVE) {
     if (c->animation.current.x <= c->mon->m.x) {
       offsetx = c->mon->m.x - c->animation.current.x;
       clip_box.x = clip_box.x + offsetx;
       clip_box.width = clip_box.width - offsetx;
-    } else if (c->animation.current.x + c->geom.width >=
+    } else if (c->animation.current.x + c->animation.current.width >=
                c->mon->m.x + c->mon->m.width) {
       clip_box.width = clip_box.width -
                        (c->animation.current.x + c->animation.current.width -
@@ -1105,7 +1105,7 @@ void client_apply_clip(Client *c) {
       offsety = c->mon->m.y - c->animation.current.y;
       clip_box.y = clip_box.y + offsety;
       clip_box.height = clip_box.height - offsety;
-    } else if (c->animation.current.y + c->geom.height >=
+    } else if (c->animation.current.y + c->animation.current.height >=
                c->mon->m.y + c->mon->m.height) {
       clip_box.height = clip_box.height -
                         (c->animation.current.y + c->animation.current.height -
@@ -5994,11 +5994,11 @@ void init_fadeout_client(Client *c) {
     fadeout_cient->current.x = 0;                        // x无偏差，垂直划出
   } else {
     fadeout_cient->current.y =
-        (c->geom.height - c->geom.height * zoom_initial_ratio) / 2;
+        (fadeout_cient->geom.height - fadeout_cient->geom.height * zoom_initial_ratio) / 2;
     fadeout_cient->current.x =
-        (c->geom.width - c->geom.width * zoom_initial_ratio) / 2;
-    fadeout_cient->current.width = c->geom.width * zoom_initial_ratio;
-    fadeout_cient->current.height = c->geom.height * zoom_initial_ratio;
+        (fadeout_cient->geom.width - fadeout_cient->geom.width * zoom_initial_ratio) / 2;
+    fadeout_cient->current.width = fadeout_cient->geom.width * zoom_initial_ratio;
+    fadeout_cient->current.height = fadeout_cient->geom.height * zoom_initial_ratio;
   }
 
   fadeout_cient->animation.passed_frames = 0;
@@ -6008,6 +6008,7 @@ void init_fadeout_client(Client *c) {
   wlr_scene_node_set_enabled(&fadeout_cient->scene->node, true);
   wl_list_insert(&fadeout_clients, &fadeout_cient->fadeout_link);
 }
+
 
 void unmapnotify(struct wl_listener *listener, void *data) {
   /* Called when the surface is unmapped, and should no longer be shown. */
