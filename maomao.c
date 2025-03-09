@@ -4131,14 +4131,16 @@ void requestdecorationmode(struct wl_listener *listener, void *data) {
         c->decoration, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 }
 
-void // 17
-requeststartdrag(struct wl_listener *listener, void *data) {
-  struct wlr_seat_request_start_drag_event *event = data;
+void
+requeststartdrag(struct wl_listener *listener, void *data)
+{
+	struct wlr_seat_request_start_drag_event *event = data;
 
-  if (wlr_seat_validate_pointer_grab_serial(seat, event->origin, event->serial))
-    wlr_seat_start_pointer_drag(seat, event->drag, event->serial);
-  else
-    wlr_data_source_destroy(event->drag->source);
+	if (wlr_seat_validate_pointer_grab_serial(seat, event->origin,
+			event->serial))
+		wlr_seat_start_pointer_drag(seat, event->drag, event->serial);
+	else
+		wlr_data_source_destroy(event->drag->source);
 }
 
 void setborder_color(Client *c) {
