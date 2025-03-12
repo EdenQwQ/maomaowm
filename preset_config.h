@@ -5,7 +5,8 @@
    ((hex >> 8) & 0xFF) / 255.0f, (hex & 0xFF) / 255.0f}
 
 /* animaion */
-char *animation_type = "slide";    // 是否启用动画 //slide,zoom
+char *animation_type_open = "slide";    // 是否启用动画 //slide,zoom
+char *animation_type_close = "slide";    // 是否启用动画 //slide,zoom
 int animations = 1;                // 是否启用动画
 char animation_fade_in = 1;        // Enable animation fade in
 float zoom_initial_ratio = 0.5;    // 动画起始窗口比例
@@ -30,8 +31,7 @@ unsigned int default_nmaster = 1;           // 默认master数量
 /* logging */
 int log_level = WLR_ERROR;
 unsigned int numlockon = 1; // 是否打开右边小键盘
-unsigned int capslock = 0;
-
+unsigned int capslock = 0;   // 是否打开大写锁定
 
 unsigned int ov_tab_mode = 0;    // alt tab切换模式
 unsigned int hotarea_size = 10;  // 热区大小,10x10
