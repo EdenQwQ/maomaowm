@@ -41,7 +41,8 @@ See below for more features.
 - isfloating: type-num(0 or 1) 
 - isfullscreen: type-num(0 or 1)
 - scroller_proportion: type-float(0.1-1.0)
-- animation_type : type-string(zoom,slide)
+- animation_type_open : type-string(zoom,slide)
+- animation_type_close : type-string(zoom,slide)
 - isnoborder : type-num(0 or 1)
 - monitor  : type-num(0-99999)
 - width : type-num(0-9999)
@@ -62,17 +63,15 @@ See below for more features.
 - alt-tab switch window like gnome
 - niri like scroller layout
 
-## suggest tools
-```
-yay -S rofi foot xdg-desktop-portal-wlr swaybg waybar wl-clip-persist cliphist wl-clipboard wlsunset
-
-```
-
 # install 
 ## stable - wlroots(0.17)
 Since 0.18 has some bugs that affect the experience, 
 I chose the more stable 0.17.4.
-
+- Arch
+```
+yay -S maomaowm-git
+```
+- Other
 ```
 yay -S libinput
 git clone -b 0.17.4 https://gitlab.freedesktop.org/wlroots/wlroots.git
@@ -99,7 +98,18 @@ meson build -Dprefix=/usr
 sudo ninja -C build install
 ```
 
+## suggest tools
+```
+yay -S rofi foot xdg-desktop-portal-wlr swaybg waybar wl-clip-persist cliphist wl-clipboard wlsunset
+
+```
+
 # config
+```
+cp /etc/maomao/config.conf ~/.config/maomao/config.conf
+touch ~/.config/maomao/autostart.sh
+chmod +x ~/.config/maomao/autostart.sh
+```
 you can use `MAOMAOCONFIG` env to set the config-folder-path and the autostart-folder-patch
 like `MAOMAOCONFIG=/home/xxx/maomao`
 
@@ -162,7 +172,7 @@ ov_tab_mode=0
 ### notice
   when you in ov mode, you can use right mouse button to close window, and left mouse button to jump to a window.
 
-# About warbar
+# About waybar
 
 - you can also use the dwl moudle in waybar to show tags and window title
 refer to waybar wiki: [dwl-module](https://github.com/Alexays/Waybar/wiki/Module:-Dwl)
