@@ -1681,7 +1681,7 @@ void arrangelayer(Monitor *m, struct wl_list *list, struct wlr_box *usable_area,
   wl_list_for_each(l, list, link) {
     struct wlr_layer_surface_v1 *layer_surface = l->layer_surface;
 
-    if (exclusive != (layer_surface->current.exclusive_zone > 0))
+    if (exclusive != (layer_surface->current.exclusive_zone > 0) || !layer_surface->initialized)
       continue;
 
     wlr_scene_layer_surface_v1_configure(l->scene_layer, &full_area,
