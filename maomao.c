@@ -348,7 +348,6 @@ struct Monitor {
   Client *sel, *prevsel;
   int isoverview;
   int is_in_hotarea;
-  int gamma_lut_changed;
 };
 
 typedef struct {
@@ -522,7 +521,6 @@ static void setup(void);
 static void sigchld(int unused);
 static void startdrag(struct wl_listener *listener, void *data);
 
-static void setgamma(struct wl_listener *listener, void *data);
 static void tile(Monitor *m, unsigned int gappo, unsigned int uappi);
 static void overview(Monitor *m, unsigned int gappo, unsigned int gappi);
 static void grid(Monitor *m, unsigned int gappo, unsigned int uappi);
@@ -620,7 +618,6 @@ static struct wlr_renderer *drw;
 static struct wlr_allocator *alloc;
 static struct wlr_compositor *compositor;
 
-static struct wlr_gamma_control_manager_v1 *gamma_control_mgr;
 static struct wlr_xdg_shell *xdg_shell;
 static struct wlr_xdg_activation_v1 *activation;
 static struct wlr_xdg_decoration_manager_v1 *xdg_decoration_mgr;
@@ -1180,26 +1177,6 @@ void clear_fullscreen_flag(Client *c) {
     c->bw = borderpx;
     client_set_fullscreen(c, false);
   }
-}
-
-void // 升级忽略
-setgamma(struct wl_listener *listener, void *data) {
-  struct wlr_gamma_control_manager_v1_set_gamma_event *event = data;
-  struct wlr_output_state state;
-  wlr_output_state_init(&state);
-  if (!wlr_gamma_control_v1_apply(event->control, &state)) {
-    wlr_output_state_finish(&state);
-    return;
-  }
-
-  if (!wlr_output_test_state(event->output, &state)) {
-    wlr_gamma_control_v1_send_failed_and_destroy(event->control);
-    wlr_output_state_finish(&state);
-    return;
-  }
-
-  wlr_output_commit_state(event->output, &state);
-  wlr_output_schedule_frame(event->output);
 }
 
 void minized(const Arg *arg) {
@@ -5044,8 +5021,7 @@ void setup(void) {
   activation = wlr_xdg_activation_v1_create(dpy);
   wl_signal_add(&activation->events.request_activate, &request_activate);
 
-  gamma_control_mgr = wlr_gamma_control_manager_v1_create(dpy);
-  LISTEN_STATIC(&gamma_control_mgr->events.set_gamma, setgamma);
+	wlr_scene_set_gamma_control_manager_v1(scene, wlr_gamma_control_manager_v1_create(dpy));
 
   /* Creates an output layout, which a wlroots utility for working with an
    * arrangement of screens in a physical layout. */
@@ -6156,10 +6132,6 @@ updatemons(struct wl_listener *listener, void *data) {
     /* make sure fullscreen clients have the right size */
     if ((c = focustop(m)) && c->isfullscreen)
       resize(c, m->m, 0);
-
-    /* Try to re-set the gamma LUT when updating monitors,
-     * it's only really needed when enabling a disabled output, but meh. */
-    m->gamma_lut_changed = 1;
 
     config_head->state.x = m->m.x;
     config_head->state.y = m->m.y;
