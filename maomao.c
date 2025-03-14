@@ -1502,6 +1502,7 @@ applyrules(Client *c) {
       c->isterm     = r->isterm > 0 ? r->isterm : c->isterm;
       c->noswallow  = r->noswallow > 0? r->noswallow : c->noswallow;
       c->isfloating = r->isfloating > 0 ? r->isfloating : c->isfloating;
+      c->isfullscreen = r->isfullscreen > 0 ? r->isfullscreen : c->isfullscreen;
       c->animation_type_open =
           r->animation_type_open == NULL ? c->animation_type_open : r->animation_type_open;
       c->animation_type_close =
@@ -4635,7 +4636,7 @@ setfloating(Client *c, int floating) {
     c->is_in_scratchpad = 0;
     // 让当前tag中的全屏窗口退出全屏参与平铺
     wl_list_for_each(fc, &clients,
-                     link) if (fc && c->tags & fc->tags && ISFULLSCREEN(fc)) {
+                     link) if (fc && fc != c && c->tags & fc->tags && ISFULLSCREEN(fc)) {
       clear_fullscreen_flag(fc);
     }
   }
