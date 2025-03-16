@@ -1460,7 +1460,7 @@ applyrules(Client *c) {
           r->animation_type_close == NULL ? c->animation_type_close : r->animation_type_close;
       c->scroller_proportion = r->scroller_proportion > 0
                                    ? r->scroller_proportion
-                                   : scroller_default_proportion;
+                                   : c->scroller_proportion;
       c->isnoborder = r->isnoborder > 0 ? r->isnoborder : c->isnoborder;
       newtags = r->tags > 0 ? r->tags | newtags : newtags;
       i = 0;
