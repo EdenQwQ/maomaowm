@@ -480,7 +480,7 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value) {
 void parse_config_line(Config *config, const char *line) {
   char key[256], value[256];
   if (sscanf(line, "%[^=]=%[^\n]", key, value) != 2) {
-    fprintf(stderr, "Error: Invalid line format: %s\n", line);
+    // fprintf(stderr, "Error: Invalid line format: %s\n", line);
     return;
   }
 
@@ -801,7 +801,7 @@ void parse_config_line(Config *config, const char *line) {
     rule->height = -1;
     rule->animation_type_open = NULL;
     rule->animation_type_close = NULL;
-    rule->scroller_proportion = -1;
+    rule->scroller_proportion = 0;
     rule->id = NULL;
     rule->title = NULL;
     rule->tags = 0;
