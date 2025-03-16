@@ -664,6 +664,7 @@ static Monitor *selmon;
 static int enablegaps = 1; /* enables gaps, used by togglegaps */
 static int axis_apply_time = 0;
 static int axis_apply_dir = 0;
+static int scroller_focus_lock = 0;
 
 /* global event handlers */
 static struct zdwl_ipc_manager_v2_interface dwl_manager_implementation = {
@@ -3907,6 +3908,7 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 	LayerSurface *l = NULL;
 	struct wlr_surface *surface = NULL;
 	struct wlr_pointer_constraint_v1 *constraint;
+  bool should_lock = false;
 
 	/* Find the client under the pointer and send the event along. */
 	xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
@@ -3980,7 +3982,22 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 	if (!surface && !seat->drag)
 		wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 
-	pointerfocus(c, surface, sx, sy, time);
+  if(c && c->mon && !c->animation.running && !(c->geom.x + c->geom.width > c->mon->m.x + c->mon->m.width || c->geom.x < c->mon->m.x)) {
+    scroller_focus_lock = 0;
+  } 
+
+  should_lock = false;
+  if(!scroller_focus_lock || !(c && c->mon && (c->geom.x + c->geom.width > c->mon->m.x + c->mon->m.width || c->geom.x < c->mon->m.x)) ) {
+    if(c && c->mon && strcmp(c->mon->pertag->ltidxs[selmon->pertag->curtag]->name,
+      "scroller") == 0  && (c->geom.x + c->geom.width > c->mon->m.x + c->mon->m.width || c->geom.x < c->mon->m.x)) {
+        should_lock = true;
+    } 
+    pointerfocus(c, surface, sx, sy, time);
+
+    if(should_lock && c && c->mon && c == c->mon->sel) {
+      scroller_focus_lock = 1;
+    }
+  }
 }
 
 void
