@@ -4477,12 +4477,10 @@ void resize(Client *c, struct wlr_box geo, int interact) {
 
   struct wlr_box *bbox;
   struct wlr_box clip;
-  struct wlr_box prev_geom;
 
   if (!c->mon)
     return;
 
-  prev_geom = c->geom;
   // wl_event_source_timer_update(c->timer_tick, 10);
   c->need_output_flush = true;
   // oldgeom = c->geom;
@@ -4505,7 +4503,7 @@ void resize(Client *c, struct wlr_box geo, int interact) {
     client_set_opacity(c, 1);
   }
 
-  if(c->animation.action == OPEN && wlr_box_equal(&prev_geom, &c->geom)) {
+  if(c->animation.action == OPEN && wlr_box_equal(&c->geom, &c->current)) {
     c->animation.action = c->animation.action;
   } else if (c->animation.tagouting) {
     c->animation.duration = animation_duration_tag;
