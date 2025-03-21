@@ -4463,6 +4463,7 @@ void set_open_animaiton(Client *c, struct wlr_box geo) {
     }
   }
 }
+
 void resize(Client *c, struct wlr_box geo, int interact) {
 
   // 动画设置的起始函数，这里用来计算一些动画的起始值
@@ -4473,10 +4474,12 @@ void resize(Client *c, struct wlr_box geo, int interact) {
 
   struct wlr_box *bbox;
   struct wlr_box clip;
+  struct wlr_box prev_geom;
 
   if (!c->mon)
     return;
 
+  prev_geom = c->geom;
   // wl_event_source_timer_update(c->timer_tick, 10);
   c->need_output_flush = true;
   // oldgeom = c->geom;
@@ -4499,7 +4502,9 @@ void resize(Client *c, struct wlr_box geo, int interact) {
     client_set_opacity(c, 1);
   }
 
-  if (c->animation.tagouting) {
+  if(c->animation.action == OPEN && wlr_box_equal(&prev_geom, &c->geom)) {
+    c->animation.action = c->animation.action;
+  } else if (c->animation.tagouting) {
     c->animation.duration = animation_duration_tag;
     c->animation.action = TAG;
   } else if (c->animation.tagining) {
@@ -4557,6 +4562,10 @@ void resize(Client *c, struct wlr_box geo, int interact) {
   } 
 
   if (c->swallowing) {
+    c->animainit_geom = c->geom;
+  }
+
+  if (c->animation_type_open && strcmp(c->animation_type_open,"none") == 0 && c->animation.action == OPEN) {
     c->animainit_geom = c->geom;
   }
 
