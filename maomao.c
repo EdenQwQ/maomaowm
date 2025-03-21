@@ -234,7 +234,6 @@ struct Client {
   struct wl_listener set_decoration_mode;
   struct wl_listener destroy_decoration;
 
-  unsigned int ignore_clear_fullscreen;
   const char *animation_type_open;
   const char *animation_type_close;
   int is_in_scratchpad;
@@ -1529,10 +1528,6 @@ applyrules(Client *c) {
         // 重新计算居中的坐标
         c->geom = setclient_coordinate_center(c->geom);
       }
-      if (r->isfullscreen && r->isfullscreen > 0) {
-        c->isfullscreen = 1;
-        c->ignore_clear_fullscreen = 1;
-      }
     }
   }
   
@@ -1557,19 +1552,17 @@ applyrules(Client *c) {
 
   wlr_scene_node_reparent(&c->scene->node,
                           layers[c->isfloating ? LyrFloat : LyrTile]);
-  setmon(c, mon, newtags);
 
   Client *fc;
   // 如果当前的tag中有新创建的非悬浮窗口,就让当前tag中的全屏窗口退出全屏参与平铺
-  wl_list_for_each(fc, &clients, link) if (fc && !c->ignore_clear_fullscreen &&
+  wl_list_for_each(fc, &clients, link) if (fc && fc != c &&
                                            c->tags & fc->tags &&
                                            ISFULLSCREEN(fc) && !c->isfloating) {
     clear_fullscreen_flag(fc);
     arrange(c->mon, false);
   }
-  else if (c->ignore_clear_fullscreen && c->isfullscreen) {
-    setfullscreen(c, 1);
-  }
+
+  setmon(c, mon, newtags);
 
   if (!(c->tags & (1 << (selmon->pertag->curtag - 1)))) {
     c->animation.from_rule = true;
@@ -3753,10 +3746,8 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->ismaxmizescreen = 0;
   c->isfullscreen = 0;
   c->istiled = 0;
-  c->ignore_clear_fullscreen = 0;
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
-  c->is_open_animation = true;
   // nop
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -3795,6 +3786,9 @@ mapnotify(struct wl_listener *listener, void *data) {
   if (c->foreign_toplevel)
     wlr_foreign_toplevel_handle_v1_set_activated(c->foreign_toplevel, true);
 
+  // make sure the animation is open type
+  c->is_open_animation = true;
+  resize(c,c->geom,0);
   printstatus();
 }
 
@@ -5370,6 +5364,25 @@ void spawn(const Arg *arg) {
   }
 }
 
+void spawn_on_empty(const Arg *arg) {
+  bool is_empty = true;
+  Client *c;
+  
+  wl_list_for_each(c, &clients, link) {
+    if (arg->ui & c->tags) {
+      is_empty = false;
+      break;
+    }
+  }
+  if(!is_empty) {
+    view(arg,true);
+    return;
+  } else {
+    view(arg,true);
+    spawn(arg);
+  }
+}
+
 void startdrag(struct wl_listener *listener, void *data) {
   struct wlr_drag *drag = data;
   if (!drag->icon)
@@ -5851,6 +5864,16 @@ void set_proportion(const Arg *arg) {
     selmon->sel->scroller_proportion = arg->f;
     selmon->sel->geom.width = max_client_width * arg->f;
     // resize(selmon->sel, selmon->sel->geom, 0);
+    arrange(selmon, false);
+  }
+}
+
+void increase_proportion(const Arg *arg) {
+  if (selmon->sel) {
+    unsigned int max_client_width =
+        selmon->w.width - 2 * scroller_structs - gappih;
+    selmon->sel->scroller_proportion = MIN(MAX(arg->f + selmon->sel->scroller_proportion,0.1),1.0);
+    selmon->sel->geom.width = max_client_width * arg->f;
     arrange(selmon, false);
   }
 }
