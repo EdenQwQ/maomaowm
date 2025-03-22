@@ -83,6 +83,7 @@
 /* macros */
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
+#define GEZERO(A) ((A) >= 0 ? (A) : 0)
 #define CLEANMASK(mask) (mask & ~WLR_MODIFIER_CAPS)
 #define VISIBLEON(C, M)                                                        \
   ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
@@ -599,6 +600,7 @@ void buffer_set_size(Client *c, animationScale scale_data);
 void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
                                   int sy, void *data);
 void client_set_pending_state(Client *c);
+void set_rect_size(struct wlr_scene_rect *rect, int width, int height);
 
 // int timer_tick_action(void *data);
 
@@ -1019,20 +1021,21 @@ void client_actual_size(Client *c, uint32_t *width, uint32_t *height) {
   *height = c->animation.current.height;
 }
 
+void set_rect_size(struct wlr_scene_rect *rect, int width, int height) {
+  wlr_scene_rect_set_size(rect, GEZERO(width), GEZERO(height));
+}
+
 void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
                   int offsety) {
 
   if (c->iskilling || !client_surface(c)->mapped)
     return;
 
-  if(clip_box.width < 0 || clip_box.height < 0)
-    return;
-
   wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
-  wlr_scene_rect_set_size(c->border[0], clip_box.width, c->bw);
-  wlr_scene_rect_set_size(c->border[1], clip_box.width, c->bw);
-  wlr_scene_rect_set_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
-  wlr_scene_rect_set_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
+  set_rect_size(c->border[0], clip_box.width, c->bw);
+  set_rect_size(c->border[1], clip_box.width, c->bw);
+  set_rect_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
+  set_rect_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
   wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
   wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
   wlr_scene_node_set_position(&c->border[1]->node, 0, clip_box.height - c->bw);
@@ -1041,15 +1044,15 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
 
   if (c->animation.running && c->animation.action != MOVE) {
     if (c->animation.current.x < c->mon->m.x) {
-      wlr_scene_rect_set_size(c->border[2], 0, 0);
+      set_rect_size(c->border[2], 0, 0);
     } else if (c->animation.current.x + c->animation.current.width >
                c->mon->m.x + c->mon->m.width) {
-      wlr_scene_rect_set_size(c->border[3], 0, 0);
+      set_rect_size(c->border[3], 0, 0);
     } else if (c->animation.current.y < c->mon->m.y) {
-      wlr_scene_rect_set_size(c->border[0], 0, 0);
+      set_rect_size(c->border[0], 0, 0);
     } else if (c->animation.current.y + c->animation.current.height >
                c->mon->m.y + c->mon->m.height) {
-      wlr_scene_rect_set_size(c->border[1], 0, 0);
+      set_rect_size(c->border[1], 0, 0);
     }
   }
 
