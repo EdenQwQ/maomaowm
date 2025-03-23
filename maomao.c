@@ -468,6 +468,8 @@ static void dwl_ipc_output_set_layout(struct wl_client *client,
 static void dwl_ipc_output_set_tags(struct wl_client *client,
                                     struct wl_resource *resource,
                                     uint32_t tagmask, uint32_t toggle_tagset);
+static void dwl_ipc_output_quit(struct wl_client *client,
+                                      struct wl_resource *resource);        
 static void dwl_ipc_output_release(struct wl_client *client,
                                    struct wl_resource *resource);
 static void focusclient(Client *c, int lift);
@@ -679,6 +681,7 @@ static struct zdwl_ipc_manager_v2_interface dwl_manager_implementation = {
 static struct zdwl_ipc_output_v2_interface dwl_output_implementation = {
     .release = dwl_ipc_output_release,
     .set_tags = dwl_ipc_output_set_tags,
+    .quit = dwl_ipc_output_quit,
     .set_layout = dwl_ipc_output_set_layout,
     .set_client_tags = dwl_ipc_output_set_client_tags};
 
@@ -3094,6 +3097,12 @@ dwl_ipc_output_set_tags(struct wl_client *client, struct wl_resource *resource, 
 	monitor = ipc_output->mon;
 
   view_in_mon(&(Arg){.ui = newtags}, true,monitor);
+}
+
+void
+dwl_ipc_output_quit(struct wl_client *client, struct wl_resource *resource)
+{
+  quit(&(Arg){0});
 }
 
 void
