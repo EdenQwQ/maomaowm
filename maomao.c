@@ -2145,6 +2145,10 @@ cleanup(void) {
     waitpid(child_pid, NULL, 0);
   }
 
+#ifdef IM
+  wl_list_remove(&input_relay->input_method_new.link);
+	wl_list_remove(&input_relay->text_input_new.link);
+#endif
   destroykeyboardgroup(&kb_group->destroy, NULL);
   wlr_backend_destroy(backend);
   wlr_scene_node_destroy(&scene->tree.node);
