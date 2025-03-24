@@ -4302,16 +4302,16 @@ void setborder_color(Client *c) {
       wlr_scene_rect_set_color(c->border[i], urgentcolor);
     return;
   }
-  if (c->is_in_scratchpad && c == selmon->sel) {
+  if (c->is_in_scratchpad && selmon &&  c == selmon->sel) {
     for (i = 0; i < 4; i++)
       wlr_scene_rect_set_color(c->border[i], scratchpadcolor);
-  } else if (c->isglobal && c == selmon->sel) {
+  } else if (c->isglobal && selmon && c == selmon->sel) {
     for (i = 0; i < 4; i++)
       wlr_scene_rect_set_color(c->border[i], globalcolor);
-  } else if (c->ismaxmizescreen && c == selmon->sel) {
+  } else if (c->ismaxmizescreen && selmon && c == selmon->sel) {
     for (i = 0; i < 4; i++)
       wlr_scene_rect_set_color(c->border[i], maxmizescreencolor);
-  } else if (c == selmon->sel) {
+  } else if (selmon && c == selmon->sel) {
     for (i = 0; i < 4; i++)
       wlr_scene_rect_set_color(c->border[i], focuscolor);
   } else {
