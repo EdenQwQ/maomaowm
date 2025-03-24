@@ -1386,25 +1386,13 @@ void gpureset(struct wl_listener *listener, void *data) {
   wlr_renderer_destroy(old_drw);
 }
 
-void // 0.5 custom
-handlesig(int signo) {
-  if (signo == SIGCHLD) {
-#ifdef XWAYLAND
-    siginfo_t in;
-    /* wlroots expects to reap the XWayland process itself, so we
-     * use WNOWAIT to keep the child waitable until we know it's not
-     * XWayland.
-     */
-    while (!waitid(P_ALL, 0, &in, WEXITED | WNOHANG | WNOWAIT) && in.si_pid &&
-           (!xwayland || in.si_pid != xwayland->server->pid))
-      waitpid(in.si_pid, NULL, 0);
-#else
-    while (waitpid(-1, NULL, WNOHANG) > 0)
-      ;
-#endif
-  } else if (signo == SIGINT || signo == SIGTERM) {
-    quit(NULL);
-  }
+void
+handlesig(int signo)
+{
+	if (signo == SIGCHLD)
+		while (waitpid(-1, NULL, WNOHANG) > 0);
+	else if (signo == SIGINT || signo == SIGTERM)
+		quit(NULL);
 }
 
 void toggle_hotarea(int x_root, int y_root) {
@@ -1892,12 +1880,7 @@ void arrangelayers(Monitor *m) {
 }
 
 void autostartexec(void) {
-  const char *const *p;
-  size_t i = 0;
-
   const char *maomaoconfig = getenv("MAOMAOCONFIG");
-  static const char
-      *autostart[4];         // 声明一个全局数组，大小为 5（包括 NULL 结 尾）
   char autostart_path[1024]; // 用于存储脚本的完整路径
 
   if (maomaoconfig && maomaoconfig[0] != '\0') {
@@ -1916,27 +1899,21 @@ void autostartexec(void) {
              "%s/.config/maomao/autostart.sh", homedir);
   }
 
-  autostart[0] = "/bin/sh";      // 使用 /bin/sh 执行脚本
-  autostart[1] = "-c";           // -c 参数表示从命令行读取脚本
-  autostart[2] = autostart_path; // 脚本的完整路径
-  autostart[3] = NULL;           // 数组以 NULL 结尾
-
-  /* count entries */
-  for (p = autostart; *p; autostart_len++, p++)
-    while (*++p)
-      ;
-
-  autostart_pids = calloc(autostart_len, sizeof(pid_t));
-  for (p = autostart; *p; i++, p++) {
-    if ((autostart_pids[i] = fork()) == 0) {
-      setsid();
-      execvp(*p, (char *const *)p);
-      die("dwl: execvp %s:", *p);
-    }
-    /* skip arguments */
-    while (*++p)
-      ;
+  int piperw[2];
+  if (pipe(piperw) < 0)
+    die("startup: pipe:");
+  if ((child_pid = fork()) < 0)
+    die("startup: fork:");
+  if (child_pid == 0) {
+    dup2(piperw[0], STDIN_FILENO);
+    close(piperw[0]);
+    close(piperw[1]);
+    execl("/bin/sh", "/bin/sh", "-c", autostart_path, NULL);
+    die("startup: execl:");
   }
+  dup2(piperw[1], STDOUT_FILENO);
+  close(piperw[1]);
+  close(piperw[0]);
 }
 
 void // 鼠标滚轮事件
@@ -2133,34 +2110,37 @@ void cleanuplisteners(void) {
 #endif
 }
 
-void // 17
-cleanup(void) {
-  cleanuplisteners();
+void
+cleanup(void)
+{
+	cleanuplisteners();
 #ifdef XWAYLAND
-  wlr_xwayland_destroy(xwayland);
+	wlr_xwayland_destroy(xwayland);
+	xwayland = NULL;
 #endif
-  wl_display_destroy_clients(dpy);
-  if (child_pid > 0) {
-    kill(child_pid, SIGTERM);
-    waitpid(child_pid, NULL, 0);
-  }
 
 #ifdef IM
   wl_list_remove(&input_relay->input_method_new.link);
 	wl_list_remove(&input_relay->text_input_new.link);
 #endif
-  destroykeyboardgroup(&kb_group->destroy, NULL);
-  wlr_backend_destroy(backend);
-  wlr_scene_node_destroy(&scene->tree.node);
-  wlr_renderer_destroy(drw);
-  wlr_allocator_destroy(alloc);
-  wlr_xcursor_manager_destroy(cursor_mgr);
-  wlr_cursor_destroy(cursor);
-  wlr_seat_destroy(seat);
-  wl_display_destroy(dpy);
-  /* If it's not destroyed manually it will cause a use-after-free of wlr_seat.
-   * Destroy it until it's fixed in the wlroots side */
-  wlr_backend_destroy(backend);
+
+	wl_display_destroy_clients(dpy);
+	if (child_pid > 0) {
+		kill(-child_pid, SIGTERM);
+		waitpid(child_pid, NULL, 0);
+	}
+	wlr_xcursor_manager_destroy(cursor_mgr);
+
+	destroykeyboardgroup(&kb_group->destroy, NULL);
+
+	/* If it's not destroyed manually it will cause a use-after-free of wlr_seat.
+	 * Destroy it until it's fixed in the wlroots side */
+	wlr_backend_destroy(backend);
+
+	wl_display_destroy(dpy);
+	/* Destroy after the wayland display (when the monitors are already destroyed)
+	   to avoid destroying them with an invalid scene output. */
+	wlr_scene_node_destroy(&scene->tree.node);
 }
 
 void // 17
@@ -4607,7 +4587,6 @@ run(char *startup_cmd) {
 
   /* Now that the socket exists and the backend is started, run the startup
    * command */
-  autostartexec();
   if (startup_cmd) {
     int piperw[2];
     if (pipe(piperw) < 0)
@@ -4624,6 +4603,8 @@ run(char *startup_cmd) {
     dup2(piperw[1], STDOUT_FILENO);
     close(piperw[1]);
     close(piperw[0]);
+  } else {
+    autostartexec();
   }
   printstatus();
 
@@ -5014,57 +4995,57 @@ void handle_foreign_destroy(struct wl_listener *listener, void *data) {
   }
 }
 
-void signalhandler(int signalnumber) {
-  void *array[64];
-  size_t size;
-  char **strings;
-  size_t i;
-  char filename[1024];
+// void signalhandler(int signalnumber) {
+//   void *array[64];
+//   size_t size;
+//   char **strings;
+//   size_t i;
+//   char filename[1024];
 
-  // 获取 MAOMAOCONFIG 环境变量
-  const char *maomaoconfig = getenv("MAOMAOCONFIG");
+//   // 获取 MAOMAOCONFIG 环境变量
+//   const char *maomaoconfig = getenv("MAOMAOCONFIG");
 
-  // 如果 MAOMAOCONFIG 环境变量不存在或为空，则使用 HOME 环境变量
-  if (!maomaoconfig || maomaoconfig[0] == '\0') {
-    // 获取当前用户家目录
-    const char *homedir = getenv("HOME");
-    if (!homedir) {
-      // 如果获取失败，则无法继续
-      return;
-    }
-    // 构建日志文件路径
-    snprintf(filename, sizeof(filename), "%s/.config/maomao/crash.log",
-             homedir);
-  } else {
-    // 使用 MAOMAOCONFIG 环境变量作为配置文件夹路径
-    snprintf(filename, sizeof(filename), "%s/crash.log", maomaoconfig);
-  }
+//   // 如果 MAOMAOCONFIG 环境变量不存在或为空，则使用 HOME 环境变量
+//   if (!maomaoconfig || maomaoconfig[0] == '\0') {
+//     // 获取当前用户家目录
+//     const char *homedir = getenv("HOME");
+//     if (!homedir) {
+//       // 如果获取失败，则无法继续
+//       return;
+//     }
+//     // 构建日志文件路径
+//     snprintf(filename, sizeof(filename), "%s/.config/maomao/crash.log",
+//              homedir);
+//   } else {
+//     // 使用 MAOMAOCONFIG 环境变量作为配置文件夹路径
+//     snprintf(filename, sizeof(filename), "%s/crash.log", maomaoconfig);
+//   }
 
-  // 打开日志文件
-  FILE *fp = fopen(filename, "w");
-  if (!fp) {
-    // 如果无法打开日志文件，则不处理
-    return;
-  }
+//   // 打开日志文件
+//   FILE *fp = fopen(filename, "w");
+//   if (!fp) {
+//     // 如果无法打开日志文件，则不处理
+//     return;
+//   }
 
-  // 获取堆栈跟踪
-  size = backtrace(array, 64);
-  strings = backtrace_symbols(array, size);
+//   // 获取堆栈跟踪
+//   size = backtrace(array, 64);
+//   strings = backtrace_symbols(array, size);
 
-  // 写入错误信息和堆栈跟踪到文件
-  fprintf(fp, "Received signal %d:\n", signalnumber);
-  for (i = 0; i < size; ++i) {
-    fprintf(fp, "%zu %s\n", i, strings[i]);
-  }
+//   // 写入错误信息和堆栈跟踪到文件
+//   fprintf(fp, "Received signal %d:\n", signalnumber);
+//   for (i = 0; i < size; ++i) {
+//     fprintf(fp, "%zu %s\n", i, strings[i]);
+//   }
 
-  // 关闭文件
-  fclose(fp);
+//   // 关闭文件
+//   fclose(fp);
 
-  // 释放分配的内存
-  free(strings);
+//   // 释放分配的内存
+//   free(strings);
 
-  // 不调用 exit 以允许生成核心转储文件
-}
+//   // 不调用 exit 以允许生成核心转储文件
+// }
 
 // int timer_tick_action(void *data) {
 //   Client *c = (Client *)data;
@@ -5081,7 +5062,7 @@ void signalhandler(int signalnumber) {
 
 void setup(void) {
 
-  signal(SIGSEGV, signalhandler);
+  // signal(SIGSEGV, signalhandler);
 
   parse_config();
 
