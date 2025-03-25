@@ -5442,14 +5442,14 @@ void tagmon(const Arg *arg) {
   if (c) {
     setmon(c, dirtomon(arg->i), 0);
     reset_foreign_tolevel(c);
-    selmon = c->mon;
-    c->geom.width = (int)(c->geom.width * selmon->m.width / c->mon->m.width);
+    c->geom.width = (int)(c->geom.width * c->mon->w.width / selmon->w.width);
     c->geom.height =
-        (int)(c->geom.height * selmon->m.height / c->mon->m.height);
+        (int)(c->geom.height * c->mon->w.height / selmon->w.height);
+    selmon = c->mon;
     // 重新计算居中的坐标
     if (c->isfloating) {
       c->geom = setclient_coordinate_center(c->geom);
-      resize(c, c->geom, 0);
+      resize(c, c->geom, 1);
     }
     warp_cursor_to_selmon(c->mon);
     focusclient(c, 1);
