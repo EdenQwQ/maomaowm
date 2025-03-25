@@ -4253,10 +4253,12 @@ void rendermon(struct wl_listener *listener, void *data) {
 
   // Draw frames for all clients
   wl_list_for_each(c, &clients, link) {
+    if(c->mon != m) continue;
     need_more_frames = client_draw_frame(c) || need_more_frames;
   }
 
   wl_list_for_each_safe(c, tmp, &fadeout_clients, fadeout_link) {
+    if(c->mon != m) continue;
     need_more_frames = client_draw_fadeout_frame(c) || need_more_frames;
   }
 
