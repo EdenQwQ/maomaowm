@@ -26,7 +26,7 @@
       ];
 
       flake = {
-        hmModules.maomaowm = import ./nix/hm-modules.nix;
+        hmModules.maomaowm = import ./nix/hm-modules.nix { inherit self; };
         nixosModules.maomaowm = import ./nix/nixos-modules.nix { inherit inputs self; };
       };
 
