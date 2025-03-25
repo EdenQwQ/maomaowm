@@ -3214,6 +3214,7 @@ void focusmon(const Arg *arg) {
       selmon = dirtomon(arg->i);
     while (!selmon->wlr_output->enabled && i++ < nmons);
   }
+  warp_cursor_to_selmon(selmon);
   focusclient(focustop(selmon), 1);
 }
 
