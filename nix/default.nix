@@ -10,12 +10,12 @@
   wayland,
   wayland-protocols,
   wayland-scanner,
-  wlroots_0_17,
   xcbutilwm,
   xwayland,
   enableXWayland ? true,
   meson,
   ninja,
+  wlroots,
 }:
 let
   pname = "maomaowm";
@@ -41,7 +41,7 @@ stdenv.mkDerivation {
       pixman
       wayland
       wayland-protocols
-      wlroots_0_17
+      wlroots
     ]
     ++ lib.optionals enableXWayland [
       libX11
