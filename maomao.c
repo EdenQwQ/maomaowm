@@ -1599,7 +1599,8 @@ arrange(Monitor *m, bool want_animation) {
 
     if (c->mon == m) {
       if (VISIBLEON(c, m)) {
-        wlr_scene_node_set_enabled(&c->scene->node, true);
+        if(!c->is_clip_to_hide)
+          wlr_scene_node_set_enabled(&c->scene->node, true);
         client_set_suspended(c, false);
         if (!c->animation.from_rule && want_animation &&
             m->pertag->prevtag != 0 && m->pertag->curtag != 0 && animations) {
