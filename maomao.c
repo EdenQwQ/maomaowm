@@ -6467,7 +6467,7 @@ void viewtoright_have_client(const Arg *arg) {
 
   for (target <<= 1; target & TAGMASK; target <<= 1, n++) {
     wl_list_for_each(c, &clients, link) {
-      if (target & c->tags) {
+      if (target & c->tags && c->mon == selmon) {
         found = 1;
         break;
       }
@@ -6541,7 +6541,7 @@ void viewtoleft_have_client(const Arg *arg) {
 
   for (target >>= 1; target > 0; target >>= 1, n++) {
     wl_list_for_each(c, &clients, link) {
-      if (target & c->tags) {
+      if (target & c->tags && c->mon == selmon) {
         found = 1;
         break;
       }
