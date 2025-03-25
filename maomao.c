@@ -3487,7 +3487,7 @@ keypress(struct wl_listener *listener, void *data)
     event->state == WL_KEYBOARD_KEY_STATE_RELEASED &&
     (keycode == 133 || keycode == 37 || keycode == 64 || keycode == 50 ||
      keycode == 134 || keycode == 105 || keycode == 108 || keycode == 62) &&
-    selmon->sel) {
+    selmon && selmon->sel) {
     if (selmon->isoverview && selmon->sel) {
       toggleoverview(&(Arg){.i = -1});
     }
@@ -6337,8 +6337,10 @@ updatemons(struct wl_listener *listener, void *data)
 
 	if (selmon && selmon->wlr_output->enabled) {
 		wl_list_for_each(c, &clients, link) {
-			if (!c->mon && client_surface(c)->mapped)
+			if (!c->mon && client_surface(c)->mapped) {
 				setmon(c, selmon, c->tags);
+        reset_foreign_tolevel(c);
+      }
 		}
 		focusclient(focustop(selmon), 1);
 		if (selmon->lock_surface) {
