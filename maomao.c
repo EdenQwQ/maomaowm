@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <linux/input-event-codes.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -254,6 +255,7 @@ struct Client {
   // struct wl_event_source *timer_tick;
   pid_t pid;
   Client *swallowing, *swallowedby;
+  bool is_clip_to_hide;
 };
 
 
@@ -1045,7 +1047,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
   wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
                               c->bw);
 
-  if (c->animation.running && c->animation.action != MOVE) {
+  if (c->istiled) {
     if (c->animation.current.x < c->mon->m.x) {
       set_rect_size(c->border[2], 0, 0);
     } else if (c->animation.current.x + c->animation.current.width >
@@ -1104,7 +1106,7 @@ void client_apply_clip(Client *c) {
   }
 
   // // make tagout tagin animations not visible in other monitors
-  if (c->animation.running && c->animation.action != MOVE) {
+  if (c->istiled) {
     if (c->animation.current.x <= c->mon->m.x) {
       offsetx = c->mon->m.x - c->animation.current.x;
       clip_box.x = clip_box.x + offsetx;
@@ -1128,6 +1130,14 @@ void client_apply_clip(Client *c) {
     }
   }
 
+  if((clip_box.width <= 0 || clip_box.height <= 0) && (c->istiled)) {
+    c->is_clip_to_hide = true;
+    wlr_scene_node_set_enabled(&c->scene->node, false);
+    return;
+  } else if(c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
+    c->is_clip_to_hide = false;
+    wlr_scene_node_set_enabled(&c->scene->node, true);
+  }
   animationScale scale_data;
   scale_data.width = clip_box.width - 2 * c->bw;
   scale_data.height = clip_box.height - 2 * c->bw;
@@ -1586,7 +1596,10 @@ arrange(Monitor *m, bool want_animation) {
 
     if (c->mon == m) {
       if (VISIBLEON(c, m)) {
-        wlr_scene_node_set_enabled(&c->scene->node, true);
+        if(!c->is_clip_to_hide || strcmp(c->mon->pertag->ltidxs[c->mon->pertag->curtag]->name,
+             "scroller") != 0) {
+          wlr_scene_node_set_enabled(&c->scene->node, true);
+        }
         client_set_suspended(c, false);
         if (!c->animation.from_rule && want_animation &&
             m->pertag->prevtag != 0 && m->pertag->curtag != 0 && animations) {
@@ -1595,7 +1608,7 @@ arrange(Monitor *m, bool want_animation) {
             c->animainit_geom.x =
                 c->animation.running
                     ? c->animation.current.x
-                    : c->geom.x + c->mon->m.width - (c->geom.x - c->mon->m.x);
+                    : c->mon->m.x + c->mon->m.width;
           } else {
             c->animainit_geom.x = c->animation.running ? c->animation.current.x
                                                        : m->m.x - c->geom.width;
@@ -1620,7 +1633,7 @@ arrange(Monitor *m, bool want_animation) {
           } else {
             c->pending = c->geom;
             c->pending.x =
-                c->geom.x + c->mon->m.width - (c->geom.x - c->mon->m.x);
+                c->mon->m.x + c->mon->m.width;
             resize(c, c->geom, 0);
           }
         } else {
@@ -5442,7 +5455,7 @@ void tagmon(const Arg *arg) {
       resize(c, c->geom, 1);
     } else {
       selmon = c->mon;
-      arrange(selmon,false);
+      arrange(selmon, false);
     }
     warp_cursor_to_selmon(c->mon);
     focusclient(c, 1);
@@ -6456,7 +6469,7 @@ void viewtoright_have_client(const Arg *arg) {
 
   for (target <<= 1; target & TAGMASK; target <<= 1, n++) {
     wl_list_for_each(c, &clients, link) {
-      if (target & c->tags) {
+      if (target & c->tags && c->mon == selmon) {
         found = 1;
         break;
       }
@@ -6530,7 +6543,7 @@ void viewtoleft_have_client(const Arg *arg) {
 
   for (target >>= 1; target > 0; target >>= 1, n++) {
     wl_list_for_each(c, &clients, link) {
-      if (target & c->tags) {
+      if (target & c->tags && c->mon == selmon) {
         found = 1;
         break;
       }
