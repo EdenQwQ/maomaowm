@@ -254,6 +254,7 @@ struct Client {
   // struct wl_event_source *timer_tick;
   pid_t pid;
   Client *swallowing, *swallowedby;
+  bool is_clip_to_hide;
 };
 
 
@@ -1045,7 +1046,9 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
   wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
                               c->bw);
 
-  if (c->animation.running && c->animation.action != MOVE) {
+  if ((c->animation.running && c->animation.action != MOVE) ||
+      (c->istiled && strcmp(c->mon->pertag->ltidxs[c->mon->pertag->curtag]->name,
+        "scroller") == 0)) {
     if (c->animation.current.x < c->mon->m.x) {
       set_rect_size(c->border[2], 0, 0);
     } else if (c->animation.current.x + c->animation.current.width >
@@ -1104,7 +1107,9 @@ void client_apply_clip(Client *c) {
   }
 
   // // make tagout tagin animations not visible in other monitors
-  if (c->animation.running && c->animation.action != MOVE) {
+  if ((c->animation.running && c->animation.action != MOVE) ||
+      (c->istiled && strcmp(c->mon->pertag->ltidxs[c->mon->pertag->curtag]->name,
+        "scroller") == 0)) {
     if (c->animation.current.x <= c->mon->m.x) {
       offsetx = c->mon->m.x - c->animation.current.x;
       clip_box.x = clip_box.x + offsetx;
@@ -1129,6 +1134,14 @@ void client_apply_clip(Client *c) {
   }
 
   animationScale scale_data;
+  if(clip_box.width <= 0 || clip_box.height <= 0) {
+    c->is_clip_to_hide = true;
+    wlr_scene_node_set_enabled(&c->scene->node, 0);
+    return;
+  } else if(c->is_clip_to_hide) {
+    c->is_clip_to_hide = false;
+    wlr_scene_node_set_enabled(&c->scene->node, 1);
+  }
   scale_data.width = clip_box.width - 2 * c->bw;
   scale_data.height = clip_box.height - 2 * c->bw;
   wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
