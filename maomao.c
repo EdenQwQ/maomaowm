@@ -1334,8 +1334,8 @@ swallow(Client *c, Client *w)
   if(w->foreign_toplevel)
     remove_foreign_topleve(w);
 
-	wlr_scene_node_set_enabled(&w->scene->node, 0);
-	wlr_scene_node_set_enabled(&c->scene->node, 1);
+	wlr_scene_node_set_enabled(&w->scene->node, false);
+	wlr_scene_node_set_enabled(&c->scene->node, true);
 
   if(!c->foreign_toplevel && c->mon)
     add_foreign_toplevel(c);
@@ -2779,7 +2779,7 @@ void destroylock(SessionLock *lock, int unlock) {
   if ((locked = !unlock))
     goto destroy;
 
-  wlr_scene_node_set_enabled(&locked_bg->node, 0);
+  wlr_scene_node_set_enabled(&locked_bg->node, false);
 
   focusclient(focustop(selmon), 0);
   motionnotify(0, NULL, 0, 0, 0, 0);
@@ -3679,7 +3679,7 @@ void killclient(const Arg *arg) {
 void locksession(struct wl_listener *listener, void *data) {
   struct wlr_session_lock_v1 *session_lock = data;
   SessionLock *lock;
-  wlr_scene_node_set_enabled(&locked_bg->node, 1);
+  wlr_scene_node_set_enabled(&locked_bg->node, true);
   if (cur_lock) {
     wlr_session_lock_v1_destroy(session_lock);
     return;
@@ -5195,7 +5195,7 @@ void setup(void) {
 
   locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
                                     (float[4]){0.1, 0.1, 0.1, 1.0});
-  wlr_scene_node_set_enabled(&locked_bg->node, 0);
+  wlr_scene_node_set_enabled(&locked_bg->node, false);
 
   /* Use decoration protocols to negotiate server-side decorations */
   wlr_server_decoration_manager_set_default_mode(
@@ -6084,7 +6084,7 @@ void unmaplayersurfacenotify(struct wl_listener *listener, void *data) {
   LayerSurface *l = wl_container_of(listener, l, unmap);
 
   l->mapped = 0;
-  wlr_scene_node_set_enabled(&l->scene->node, 0);
+  wlr_scene_node_set_enabled(&l->scene->node, false);
   if (l == exclusive_focus)
     exclusive_focus = NULL;
   if (l->layer_surface->output && (l->mon = l->layer_surface->output->data))
