@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <linux/input-event-codes.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -1132,6 +1133,14 @@ void client_apply_clip(Client *c) {
   if((clip_box.width <= 0 || clip_box.height <= 0) && (c->istiled)) {
     c->is_clip_to_hide = true;
     wlr_scene_node_set_enabled(&c->scene->node, false);
+    if(c->animation.tagouting) {
+      c->animation.tagouting = false;
+      c->animation.current = c->geom;
+      c->animation.tagouted = true;
+      c->current = c->geom;
+    }
+    c->animation.running = false;
+    c->need_output_flush = false;
     return;
   } else if(c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
     c->is_clip_to_hide = false;
@@ -1596,8 +1605,9 @@ arrange(Monitor *m, bool want_animation) {
     if (c->mon == m) {
       if (VISIBLEON(c, m)) {
         if(!c->is_clip_to_hide || strcmp(c->mon->pertag->ltidxs[c->mon->pertag->curtag]->name,
-             "scroller") != 0) 
+             "scroller") != 0) {
           wlr_scene_node_set_enabled(&c->scene->node, true);
+        }
         client_set_suspended(c, false);
         if (!c->animation.from_rule && want_animation &&
             m->pertag->prevtag != 0 && m->pertag->curtag != 0 && animations) {
@@ -1606,7 +1616,7 @@ arrange(Monitor *m, bool want_animation) {
             c->animainit_geom.x =
                 c->animation.running
                     ? c->animation.current.x
-                    : c->geom.x + c->mon->m.width - (c->geom.x - c->mon->m.x);
+                    : c->mon->m.x + c->mon->m.width;
           } else {
             c->animainit_geom.x = c->animation.running ? c->animation.current.x
                                                        : m->m.x - c->geom.width;
@@ -1631,7 +1641,7 @@ arrange(Monitor *m, bool want_animation) {
           } else {
             c->pending = c->geom;
             c->pending.x =
-                c->geom.x + c->mon->m.width - (c->geom.x - c->mon->m.x);
+                c->mon->m.x + c->mon->m.width;
             resize(c, c->geom, 0);
           }
         } else {
