@@ -2216,11 +2216,18 @@ closemon(Monitor *m)
 		if (c->isfloating && c->geom.x > m->m.width)
 			resize(c, (struct wlr_box){.x = c->geom.x - m->w.width, .y = c->geom.y,
 					.width = c->geom.width, .height = c->geom.height}, 0);
-		if (c->mon == m)
-			setmon(c, selmon, c->tags);
+		if (c->mon == m) {
+      if(selmon == NULL) {
+        c->mon = NULL;
+      } else {
+        setmon(c, selmon, c->tags);
+      }
+    }
 	}
-	focusclient(focustop(selmon), 1);
-	printstatus();
+  if(selmon) {
+	  focusclient(focustop(selmon), 1);
+	  printstatus();
+  }
 }
 
 
@@ -3128,7 +3135,7 @@ void focusclient(Client *c, int lift) {
   if (c && lift)
     wlr_scene_node_raise_to_top(&c->scene->node); // 将视图提升到顶层
 
-  if (c && client_surface(c) == old_keyboard_focus_surface)
+  if (c && client_surface(c) == old_keyboard_focus_surface && selmon && selmon->sel)
     return;
 
   if (selmon && selmon->sel && selmon->sel->foreign_toplevel) {
