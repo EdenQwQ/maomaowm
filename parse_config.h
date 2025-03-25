@@ -93,6 +93,7 @@ typedef struct {
   int scroller_structs;
   float scroller_default_proportion;
   int scoller_focus_center;
+  int focus_cross_monitor;
   float *scroller_proportion_preset;
   int scroller_proportion_preset_count;
 
@@ -552,6 +553,8 @@ void parse_config_line(Config *config, const char *line) {
     config->scroller_default_proportion = atof(value);
   } else if (strcmp(key, "scoller_focus_center") == 0) {
     config->scoller_focus_center = atoi(value);
+  } else if (strcmp(key, "focus_cross_monitor") == 0) {
+    config->focus_cross_monitor = atoi(value);
   } else if (strcmp(key, "scroller_proportion_preset") == 0) {
     // 1. 统计 value 中有多少个逗号，确定需要解析的浮点数个数
     int count = 0; // 初始化为 0
@@ -1130,6 +1133,7 @@ void override_config(void) {
   scroller_structs = config.scroller_structs;
   scroller_default_proportion = config.scroller_default_proportion;
   scoller_focus_center = config.scoller_focus_center;
+  focus_cross_monitor = config.focus_cross_monitor;
 
   new_is_master = config.new_is_master;
   default_mfact = config.default_mfact;
@@ -1208,6 +1212,7 @@ void set_value_default() {
   config.scroller_structs = 20;
   config.scroller_default_proportion = 0.9;
   config.scoller_focus_center = 0;
+  config.focus_cross_monitor = 0;
 
   config.bypass_surface_visibility =
       0; /* 1 means idle inhibitors will disable idle tracking even if it's
