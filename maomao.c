@@ -1133,14 +1133,6 @@ void client_apply_clip(Client *c) {
   if((clip_box.width <= 0 || clip_box.height <= 0) && (c->istiled)) {
     c->is_clip_to_hide = true;
     wlr_scene_node_set_enabled(&c->scene->node, false);
-    if(c->animation.tagouting) {
-      c->animation.tagouting = false;
-      c->animation.current = c->geom;
-      c->animation.tagouted = true;
-      c->current = c->geom;
-    }
-    c->animation.running = false;
-    c->need_output_flush = false;
     return;
   } else if(c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
     c->is_clip_to_hide = false;
@@ -4275,12 +4267,10 @@ void rendermon(struct wl_listener *listener, void *data) {
 
   // Draw frames for all clients
   wl_list_for_each(c, &clients, link) {
-    if(c->mon != m) continue;
     need_more_frames = client_draw_frame(c) || need_more_frames;
   }
 
   wl_list_for_each_safe(c, tmp, &fadeout_clients, fadeout_link) {
-    if(c->mon != m) continue;
     need_more_frames = client_draw_fadeout_frame(c) || need_more_frames;
   }
 
