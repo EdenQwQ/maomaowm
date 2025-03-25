@@ -1595,7 +1595,8 @@ arrange(Monitor *m, bool want_animation) {
 
     if (c->mon == m) {
       if (VISIBLEON(c, m)) {
-        if(!c->is_clip_to_hide)
+        if(!c->is_clip_to_hide || strcmp(c->mon->pertag->ltidxs[c->mon->pertag->curtag]->name,
+             "scroller") != 0) 
           wlr_scene_node_set_enabled(&c->scene->node, true);
         client_set_suspended(c, false);
         if (!c->animation.from_rule && want_animation &&
