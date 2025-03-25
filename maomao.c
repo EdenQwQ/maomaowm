@@ -4206,6 +4206,15 @@ void scene_buffer_apply_opacity(struct wlr_scene_buffer *buffer, int sx, int sy,
 void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
                              void *data) {
   animationScale *scale_data = (animationScale *)data;
+  
+  if(scale_data->height_scale <= 0 || scale_data->width_scale <= 0) {
+    return;
+  }
+
+  if(scale_data->height <= 0 || scale_data->width <= 0) { 
+    return;
+  }
+
   struct wlr_scene_surface *surface = wlr_scene_surface_try_from_buffer(buffer);
   if (wlr_subsurface_try_from_wlr_surface(surface->surface) != NULL) {
     wlr_scene_buffer_set_dest_size(
